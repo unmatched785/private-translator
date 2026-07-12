@@ -1,48 +1,97 @@
-const LANGUAGES = [
-  ["auto", "언어 자동 감지"],
-  ["ko", "한국어"],
-  ["en", "영어"],
-  ["ja", "일본어"],
-  ["zh", "중국어 간체"],
-  ["zh-Hant", "중국어 번체"],
-  ["fr", "프랑스어"],
-  ["de", "독일어"],
-  ["es", "스페인어"],
-  ["pt", "포르투갈어"],
-  ["it", "이탈리아어"],
-  ["ru", "러시아어"],
-  ["ar", "아랍어"],
-  ["tr", "튀르키예어"],
-  ["th", "태국어"],
-  ["vi", "베트남어"],
-  ["id", "인도네시아어"],
-  ["ms", "말레이어"],
-  ["tl", "필리핀어"],
-  ["hi", "힌디어"],
-  ["pl", "폴란드어"],
-  ["cs", "체코어"],
-  ["nl", "네덜란드어"],
-  ["uk", "우크라이나어"],
-  ["he", "히브리어"],
-  ["fa", "페르시아어"],
-  ["bn", "벵골어"],
-  ["ta", "타밀어"],
-  ["te", "텔루구어"],
-  ["mr", "마라티어"],
-  ["gu", "구자라트어"],
-  ["ur", "우르두어"],
-  ["km", "크메르어"],
-  ["my", "미얀마어"],
-  ["bo", "티베트어"],
-  ["kk", "카자흐어"],
-  ["mn", "몽골어"],
-  ["ug", "위구르어"],
-  ["yue", "광둥어"],
+const LANGUAGE_CODES = [
+  "ko",
+  "en",
+  "ja",
+  "zh",
+  "zh-Hant",
+  "fr",
+  "de",
+  "es",
+  "pt",
+  "it",
+  "ru",
+  "ar",
+  "tr",
+  "th",
+  "vi",
+  "id",
+  "ms",
+  "tl",
+  "hi",
+  "pl",
+  "cs",
+  "nl",
+  "uk",
+  "he",
+  "fa",
+  "bn",
+  "ta",
+  "te",
+  "mr",
+  "gu",
+  "ur",
+  "km",
+  "my",
+  "bo",
+  "kk",
+  "mn",
+  "ug",
+  "yue",
 ];
 
-const LANGUAGE_NAMES = Object.fromEntries(LANGUAGES);
+const LANGUAGE_FALLBACK_NAMES = {
+  ko: "Korean",
+  en: "English",
+  ja: "Japanese",
+  zh: "Chinese (Simplified)",
+  "zh-Hant": "Chinese (Traditional)",
+  fr: "French",
+  de: "German",
+  es: "Spanish",
+  pt: "Portuguese",
+  it: "Italian",
+  ru: "Russian",
+  ar: "Arabic",
+  tr: "Turkish",
+  th: "Thai",
+  vi: "Vietnamese",
+  id: "Indonesian",
+  ms: "Malay",
+  tl: "Filipino",
+  hi: "Hindi",
+  pl: "Polish",
+  cs: "Czech",
+  nl: "Dutch",
+  uk: "Ukrainian",
+  he: "Hebrew",
+  fa: "Persian",
+  bn: "Bengali",
+  ta: "Tamil",
+  te: "Telugu",
+  mr: "Marathi",
+  gu: "Gujarati",
+  ur: "Urdu",
+  km: "Khmer",
+  my: "Burmese",
+  bo: "Tibetan",
+  kk: "Kazakh",
+  mn: "Mongolian",
+  ug: "Uyghur",
+  yue: "Cantonese",
+};
+
+const LANGUAGE_LOCALE_OVERRIDES = {
+  ko: {
+    bo: "티베트어",
+  },
+};
+
+const i18n = globalThis.TranslatorI18n;
+const t = (key, variables = {}, fallback) => i18n.t(key, variables, fallback);
+let languageDisplayNames = createLanguageDisplayNames();
 
 const refs = {
+  uiLocale: document.querySelector("#uiLocale"),
   profileBadge: document.querySelector("#profileBadge"),
   sourceLanguage: document.querySelector("#sourceLanguage"),
   targetLanguage: document.querySelector("#targetLanguage"),
@@ -89,47 +138,99 @@ const state = {
   requestSequence: 0,
   searchTimer: null,
   toastTimer: null,
+  historyMessage: { key: "history.save_on", variables: {} },
+  translationMeta: { kind: "ready" },
 };
 
 document.addEventListener("DOMContentLoaded", initialize);
 
 async function initialize() {
+  i18n.applyDocument();
+  refs.uiLocale.value = i18n.getLocale();
   populateLanguages();
   bindEvents();
 
   try {
     const [config, health] = await Promise.all([api("/api/config"), api("/api/health")]);
     state.config = config;
-    refs.profileBadge.textContent = `${config.profile.toUpperCase()} · 기록 ${health.history_count}개`;
     populateModels(config);
     restorePreferences();
+    populateLanguages(refs.sourceLanguage.value, refs.targetLanguage.value);
     updateModelDescription();
+    updateCharacterCount();
+    updateProfileBadge(health.history_count);
     await loadHistory();
   } catch (error) {
     showToast(error.message, true);
-    refs.profileBadge.textContent = "연결 오류";
-    refs.historyList.replaceChildren(emptyMessage("로컬 기록고를 열 수 없습니다."));
+    refs.profileBadge.textContent = t("status.connection_error");
+    refs.historyList.replaceChildren(emptyMessage(t("error.vault_open")));
   }
 }
 
-function populateLanguages() {
-  for (const [code, label] of LANGUAGES) {
+function createLanguageDisplayNames() {
+  try {
+    return new Intl.DisplayNames([i18n.getLocale()], { type: "language" });
+  } catch {
+    return null;
+  }
+}
+
+function localizedLanguageName(code) {
+  if (code === "auto") return t("language.auto");
+  const displayCode = code === "zh" ? "zh-Hans" : code;
+  try {
+    const localized = languageDisplayNames?.of(displayCode);
+    return localized && localized !== displayCode && localized !== code
+      ? localized
+      : LANGUAGE_LOCALE_OVERRIDES[i18n.getLocale()]?.[code] || LANGUAGE_FALLBACK_NAMES[code] || code;
+  } catch {
+    return LANGUAGE_LOCALE_OVERRIDES[i18n.getLocale()]?.[code] || LANGUAGE_FALLBACK_NAMES[code] || code;
+  }
+}
+
+function localizedModelLabel(modelId, fallback = modelId) {
+  return t(`model.${modelId}.label`, {}, fallback);
+}
+
+function localizedModelDescription(model) {
+  return t(`model.${model.id}.description`, {}, model.description);
+}
+
+function localizedPrivacy(privacy) {
+  return privacy === "device" ? t("privacy.device") : t("privacy.private_network");
+}
+
+function populateLanguages(source = refs.sourceLanguage.value || "auto", target = refs.targetLanguage.value || "ko") {
+  refs.sourceLanguage.replaceChildren();
+  refs.targetLanguage.replaceChildren();
+  refs.sourceLanguage.append(new Option(localizedLanguageName("auto"), "auto"));
+  for (const code of supportedLanguageCodes()) {
+    const label = localizedLanguageName(code);
     refs.sourceLanguage.append(new Option(label, code));
-    if (code !== "auto") {
-      refs.targetLanguage.append(new Option(label, code));
-    }
+    refs.targetLanguage.append(new Option(label, code));
   }
-  refs.sourceLanguage.value = "auto";
-  refs.targetLanguage.value = "ko";
+  refs.sourceLanguage.value = [...refs.sourceLanguage.options].some((option) => option.value === source)
+    ? source
+    : "auto";
+  refs.targetLanguage.value = [...refs.targetLanguage.options].some((option) => option.value === target)
+    ? target
+    : "ko";
 }
 
-function populateModels(config) {
+function supportedLanguageCodes() {
+  if (!state.config) return LANGUAGE_CODES;
+  const model = state.config.models.find((candidate) => candidate.id === refs.modelSelect.value);
+  return Array.isArray(model?.supported_languages) ? model.supported_languages : LANGUAGE_CODES;
+}
+
+function populateModels(config, selected = refs.modelSelect.value || config.default_model) {
   refs.modelSelect.replaceChildren();
   for (const model of config.models) {
-    const suffix = model.privacy === "device" ? " · 이 장치" : " · 개인 네트워크";
-    refs.modelSelect.append(new Option(`${model.label}${suffix}`, model.id));
+    refs.modelSelect.append(
+      new Option(`${localizedModelLabel(model.id, model.label)} · ${localizedPrivacy(model.privacy)}`, model.id),
+    );
   }
-  refs.modelSelect.value = config.default_model;
+  refs.modelSelect.value = config.models.some((model) => model.id === selected) ? selected : config.default_model;
 }
 
 function restorePreferences() {
@@ -144,6 +245,8 @@ function restorePreferences() {
 }
 
 function bindEvents() {
+  refs.uiLocale.addEventListener("change", () => i18n.setLocale(refs.uiLocale.value));
+  window.addEventListener("translator:locale-change", refreshLocale);
   refs.sourceText.addEventListener("input", updateCharacterCount);
   refs.sourceText.addEventListener("paste", () => {
     window.setTimeout(() => translateCurrent("paste"), 40);
@@ -166,6 +269,7 @@ function bindEvents() {
     if (state.config) {
       localStorage.setItem(`translator.model.${state.config.profile}`, refs.modelSelect.value);
     }
+    populateLanguages(refs.sourceLanguage.value, refs.targetLanguage.value);
     updateModelDescription();
   });
   refs.targetLanguage.addEventListener("change", () => {
@@ -189,6 +293,71 @@ function bindEvents() {
   refs.mobileScrim.addEventListener("click", closeHistoryPanel);
 }
 
+function refreshLocale() {
+  const source = refs.sourceLanguage.value;
+  const target = refs.targetLanguage.value;
+  const model = refs.modelSelect.value;
+  languageDisplayNames = createLanguageDisplayNames();
+  i18n.applyDocument();
+  refs.uiLocale.value = i18n.getLocale();
+  populateLanguages(source, target);
+  if (state.config) populateModels(state.config, model);
+  updateCharacterCount();
+  updateModelDescription();
+  updateSaveState(false);
+  updateMemoryControls();
+  updateProfileBadge();
+  renderHistory();
+  renderHistoryState();
+  renderTranslationMeta();
+}
+
+function updateProfileBadge(count = state.records.length) {
+  if (!state.config) return;
+  const key = state.historyFilter === "approved" ? "profile.assets" : "profile.records";
+  refs.profileBadge.textContent = t(key, {
+    profile: state.config.profile.toUpperCase(),
+    count: formatNumber(count),
+  });
+}
+
+function setHistoryState(key, variables = {}) {
+  state.historyMessage = { key, variables };
+  renderHistoryState();
+}
+
+function renderHistoryState() {
+  refs.historyState.textContent = t(state.historyMessage.key, state.historyMessage.variables);
+}
+
+function setTranslationMeta(meta) {
+  state.translationMeta = meta;
+  renderTranslationMeta();
+}
+
+function renderTranslationMeta() {
+  const meta = state.translationMeta;
+  if (meta.kind === "processing") {
+    refs.translationMeta.textContent = t("output.processing");
+    return;
+  }
+  if (meta.kind === "result") {
+    const chunks = meta.chunkCount > 1
+      ? ` · ${t("output.chunk_count", { count: formatNumber(meta.chunkCount) })}`
+      : "";
+    const asset = meta.memoryRevision
+      ? ` · ${t("memory.meta", { revision: meta.memoryRevision })}`
+      : "";
+    refs.translationMeta.textContent = `${localizedModelLabel(meta.modelId, meta.modelLabel)} · ${formatLatency(meta.latencyMs)}${chunks}${asset}`;
+    return;
+  }
+  if (meta.kind === "asset") {
+    refs.translationMeta.textContent = `${localizedModelLabel(meta.modelId, meta.modelLabel)} · ${t("memory.meta", { revision: meta.revision })}`;
+    return;
+  }
+  refs.translationMeta.textContent = t("output.ready");
+}
+
 async function translateCurrent(trigger) {
   if (state.translating && trigger === "paste") {
     state.requestController?.abort();
@@ -196,12 +365,16 @@ async function translateCurrent(trigger) {
 
   const text = refs.sourceText.value;
   if (!text.trim()) {
-    showToast("번역할 내용을 입력하세요.", true);
+    showToast(t("translate.empty"), true);
     refs.sourceText.focus();
     return;
   }
   if (!state.config) {
-    showToast("로컬 번역 서비스가 아직 준비되지 않았습니다.", true);
+    showToast(t("translate.not_ready"), true);
+    return;
+  }
+  if ([...text].length > state.config.max_text_chars) {
+    showToast(t("translate.too_long", { max: formatNumber(state.config.max_text_chars) }), true);
     return;
   }
 
@@ -235,9 +408,14 @@ async function translateCurrent(trigger) {
 
     if (requestSequence !== state.requestSequence) return;
     showTranslation(result.translated_text);
-    const chunkMeta = result.chunk_count > 1 ? ` · ${result.chunk_count}개 구간` : "";
-    refs.translationMeta.textContent = `${result.model_label} · ${formatLatency(result.latency_ms)}${chunkMeta}`;
-    refs.historyState.textContent = result.history_id ? "암호화 기록 저장됨" : "이번 번역은 기록하지 않음";
+    setTranslationMeta({
+      kind: "result",
+      modelId: result.model_id,
+      modelLabel: result.model_label,
+      latencyMs: result.latency_ms,
+      chunkCount: result.chunk_count,
+    });
+    setHistoryState(result.history_id ? "history.saved" : "history.not_saved");
     state.activeRecordId = result.history_id;
     refs.deleteActive.hidden = !result.history_id;
     updateMemoryControls();
@@ -247,7 +425,7 @@ async function translateCurrent(trigger) {
     }
   } catch (error) {
     if (error.name !== "AbortError" && requestSequence === state.requestSequence) {
-      setEmptyOutput("번역 엔진에 연결하지 못했습니다", error.message);
+      setEmptyOutput(t("output.engine_failed"), error.message);
       showToast(error.message, true);
     }
   } finally {
@@ -266,14 +444,16 @@ function createClientId() {
 
 function setLoadingState(loading) {
   refs.translateButton.disabled = loading;
-  refs.translateButton.querySelector(".button-label").textContent = loading ? "번역 중…" : "번역하기";
+  refs.translateButton.querySelector(".button-label").textContent = loading
+    ? t("translate.loading")
+    : t("translate.button");
   if (loading) {
     refs.translatedText.classList.remove("visible");
     refs.outputState.classList.remove("hidden", "empty");
     refs.outputState.classList.add("loading");
-    refs.outputState.querySelector("strong").textContent = "로컬 모델이 번역하고 있습니다";
-    refs.outputState.querySelector(":scope > span").textContent = "텍스트는 선택한 개인 장치 밖으로 전송되지 않습니다.";
-    refs.translationMeta.textContent = "처리 중";
+    refs.outputState.querySelector("strong").textContent = t("output.loading_title");
+    refs.outputState.querySelector(":scope > span").textContent = t("output.loading_subtitle");
+    setTranslationMeta({ kind: "processing" });
   }
 }
 
@@ -292,7 +472,7 @@ function setEmptyOutput(title, message) {
   refs.outputState.classList.add("empty");
   refs.outputState.querySelector("strong").textContent = title;
   refs.outputState.querySelector(":scope > span").textContent = message;
-  refs.translationMeta.textContent = "준비됨";
+  setTranslationMeta({ kind: "ready" });
 }
 
 function renderQa(warnings = []) {
@@ -302,9 +482,19 @@ function renderQa(warnings = []) {
     return;
   }
   const strong = document.createElement("strong");
-  strong.textContent = "확인 권장: ";
-  refs.qaPanel.append(strong, document.createTextNode(warnings.join(" · ")));
+  strong.textContent = t("qa.title");
+  refs.qaPanel.append(strong, document.createTextNode(warnings.map(localizedQaWarning).join(" · ")));
   refs.qaPanel.hidden = false;
+}
+
+function localizedQaWarning(warning) {
+  const legacyCodes = {
+    "번역 결과가 비어 있습니다": "empty_result",
+    "원문의 숫자 또는 단위가 번역문과 다를 수 있습니다": "number_mismatch",
+    "URL이 누락되거나 변경되었을 수 있습니다": "url_mismatch",
+  };
+  const code = legacyCodes[warning] || warning;
+  return t(`qa.${code}`, {}, warning);
 }
 
 async function loadHistory() {
@@ -326,15 +516,12 @@ async function loadHistory() {
         );
     } else {
       const response = await api(`/api/history?${params}`);
-    state.records = response.records;
+      state.records = response.records;
     }
     renderHistory();
-    if (state.config) {
-      const countLabel = state.historyFilter === "approved" ? "자산" : "기록";
-      refs.profileBadge.textContent = `${state.config.profile.toUpperCase()} · ${countLabel} ${state.records.length}개`;
-    }
+    updateProfileBadge();
   } catch (error) {
-    refs.historyList.replaceChildren(emptyMessage("기록을 불러올 수 없습니다."));
+    refs.historyList.replaceChildren(emptyMessage(t("history.load_failed")));
     showToast(error.message, true);
   }
 }
@@ -343,12 +530,12 @@ function renderHistory() {
   refs.historyList.replaceChildren();
   if (!state.records.length) {
     const message = refs.historySearch.value.trim()
-      ? "검색 결과가 없습니다.\n기록은 암호화된 상태로 로컬에 남아 있습니다."
+      ? t("history.empty.search")
       : state.historyFilter === "favorites"
-        ? "즐겨찾기한 번역이 없습니다."
+        ? t("history.empty.favorites")
         : state.historyFilter === "approved"
-          ? "아직 승인한 번역 자산이 없습니다.\n좋은 번역을 열어 자산으로 승인하세요."
-        : "아직 저장된 번역이 없습니다.\n첫 번역을 붙여넣어 시작하세요.";
+          ? t("history.empty.assets")
+          : t("history.empty.all");
     refs.historyList.append(emptyMessage(message));
     return;
   }
@@ -374,7 +561,7 @@ function renderHistory() {
     const openButton = document.createElement("button");
     openButton.className = "history-open";
     openButton.type = "button";
-    openButton.setAttribute("aria-label", `${record.source_text.slice(0, 50)} 번역 기록 열기`);
+    openButton.setAttribute("aria-label", t("history.open_record", { text: record.source_text.slice(0, 50) }));
 
     const source = document.createElement("p");
     source.className = "history-item-source";
@@ -392,14 +579,17 @@ function renderHistory() {
       document.createTextNode(formatTime(record.created_at)),
     );
     if (record.approved_revision) {
-      meta.append(document.createTextNode("·"), document.createTextNode(`번역 자산 v${record.approved_revision}`));
+      meta.append(
+        document.createTextNode("·"),
+        document.createTextNode(t("memory.meta", { revision: record.approved_revision })),
+      );
     }
 
     const star = document.createElement("button");
     star.className = `history-star${record.favorite ? " on" : ""}`;
     star.type = "button";
     star.textContent = record.favorite ? "★" : "☆";
-    star.setAttribute("aria-label", record.favorite ? "즐겨찾기 해제" : "즐겨찾기 추가");
+    star.setAttribute("aria-label", record.favorite ? t("history.favorite.remove") : t("history.favorite.add"));
     star.addEventListener("click", (event) => {
       event.stopPropagation();
       toggleFavorite(record);
@@ -451,9 +641,15 @@ async function openHistoryRecord(record) {
     refs.modelSelect.value = openedRecord.model_id;
   }
   showTranslation(openedRecord.translated_text);
-  const memoryMeta = state.activeMemoryRevision ? ` · 자산 v${state.activeMemoryRevision}` : "";
-  refs.translationMeta.textContent = `${openedRecord.model_label} · ${formatLatency(openedRecord.latency_ms)}${memoryMeta}`;
-  refs.historyState.textContent = state.activeMemoryId ? "승인 번역 자산에서 열림" : "암호화 기록에서 열림";
+  setTranslationMeta({
+    kind: "result",
+    modelId: openedRecord.model_id,
+    modelLabel: openedRecord.model_label,
+    latencyMs: openedRecord.latency_ms,
+    chunkCount: openedRecord.chunk_count || 1,
+    memoryRevision: state.activeMemoryRevision,
+  });
+  setHistoryState(state.activeMemoryId ? "memory.opened" : "history.opened");
   refs.deleteActive.hidden = !state.activeRecordId;
   updateMemoryControls();
   renderQa(openedRecord.qa_warnings);
@@ -491,10 +687,10 @@ async function handleMemoryAction() {
         active.approved_memory_id = memory.id;
         active.approved_revision = memory.revision;
       }
-      refs.historyState.textContent = `번역 자산으로 승인됨 · v${memory.revision}`;
+      setHistoryState("memory.approved", { revision: memory.revision });
       updateMemoryControls();
       await loadHistory();
-      showToast("이 번역을 재사용 가능한 로컬 자산으로 승인했습니다.");
+      showToast(t("memory.approve_done"));
     } catch (error) {
       showToast(error.message, true);
     }
@@ -506,10 +702,10 @@ async function handleMemoryAction() {
     state.memoryEditOriginal = refs.translatedText.value;
     refs.translatedText.readOnly = false;
     refs.translatedText.focus();
-    refs.memoryAction.textContent = `v${state.activeMemoryRevision + 1}로 저장`;
+    refs.memoryAction.textContent = t("memory.save_revision", { revision: state.activeMemoryRevision + 1 });
     refs.cancelMemoryEdit.hidden = false;
     refs.deleteMemory.hidden = true;
-    refs.historyState.textContent = "번역 자산 수정 중 · 저장하면 새 버전이 추가됩니다";
+    setHistoryState("memory.editing");
     return;
   }
 
@@ -528,10 +724,15 @@ async function handleMemoryAction() {
     resetMemoryEditing();
     updateMemoryControls();
     renderQa(memory.qa_warnings);
-    refs.historyState.textContent = `번역 자산 수정 저장됨 · v${memory.revision}`;
-    refs.translationMeta.textContent = `${memory.model_label} · 자산 v${memory.revision}`;
+    setHistoryState("memory.saved", { revision: memory.revision });
+    setTranslationMeta({
+      kind: "asset",
+      modelId: memory.model_id,
+      modelLabel: memory.model_label,
+      revision: memory.revision,
+    });
     await loadHistory();
-    showToast(`이전 내용은 유지하고 v${memory.revision}을 추가했습니다.`);
+    showToast(t("memory.saved_done", { revision: memory.revision }));
   } catch (error) {
     showToast(error.message, true);
   }
@@ -540,7 +741,7 @@ async function handleMemoryAction() {
 function cancelMemoryEdit() {
   resetMemoryEditing(true);
   updateMemoryControls();
-  refs.historyState.textContent = `번역 자산 v${state.activeMemoryRevision} · 수정 취소됨`;
+  setHistoryState("memory.cancelled", { revision: state.activeMemoryRevision });
 }
 
 function resetMemoryEditing(restore = false) {
@@ -556,16 +757,16 @@ function updateMemoryControls() {
   refs.deleteMemory.hidden = !state.activeMemoryId;
   if (state.activeMemoryId) {
     refs.memoryAction.hidden = false;
-    refs.memoryAction.textContent = `번역 자산 v${state.activeMemoryRevision} 수정`;
+    refs.memoryAction.textContent = t("memory.edit", { revision: state.activeMemoryRevision });
     return;
   }
   refs.memoryAction.hidden = !state.activeRecordId;
-  refs.memoryAction.textContent = "번역 자산으로 승인";
+  refs.memoryAction.textContent = t("memory.approve");
 }
 
 async function deleteActiveMemory() {
   if (!state.activeMemoryId) return;
-  if (!window.confirm("이 승인 번역 자산과 모든 이전 버전을 삭제할까요? 원본 번역 기록은 유지됩니다.")) {
+  if (!window.confirm(t("memory.delete_confirm"))) {
     return;
   }
   try {
@@ -581,9 +782,9 @@ async function deleteActiveMemory() {
     state.activeMemoryId = null;
     state.activeMemoryRevision = null;
     updateMemoryControls();
-    refs.historyState.textContent = state.activeRecordId ? "번역 자산 삭제됨 · 기록은 유지됨" : "번역 자산 삭제됨";
+    setHistoryState(state.activeRecordId ? "memory.deleted_history_kept" : "memory.deleted");
     await loadHistory();
-    showToast("승인 번역 자산과 버전을 삭제했습니다.");
+    showToast(t("memory.delete_done"));
   } catch (error) {
     showToast(error.message, true);
   }
@@ -592,8 +793,8 @@ async function deleteActiveMemory() {
 async function deleteActiveRecord() {
   if (!state.activeRecordId) return;
   const confirmation = state.activeMemoryId
-    ? "이 번역 기록만 삭제할까요? 승인한 번역 자산과 버전은 그대로 유지됩니다."
-    : "이 번역 기록을 로컬 기록고에서 삭제할까요?";
+    ? t("history.delete_confirm_keep_asset")
+    : t("history.delete_confirm");
   if (!window.confirm(confirmation)) return;
 
   try {
@@ -602,9 +803,9 @@ async function deleteActiveRecord() {
     refs.deleteActive.hidden = true;
     resetMemoryEditing();
     updateMemoryControls();
-    refs.historyState.textContent = state.activeMemoryId ? "기록 삭제됨 · 번역 자산은 유지됨" : "기록 삭제됨";
+    setHistoryState(state.activeMemoryId ? "history.deleted_asset_kept" : "history.deleted");
     await loadHistory();
-    showToast("번역 기록을 삭제했습니다.");
+    showToast(t("history.delete_done"));
   } catch (error) {
     showToast(error.message, true);
   }
@@ -613,20 +814,21 @@ async function deleteActiveRecord() {
 function updateCharacterCount() {
   const count = [...refs.sourceText.value].length;
   const max = state.config?.max_text_chars;
-  refs.characterCount.textContent = max ? `${count.toLocaleString()} / ${max.toLocaleString()}자` : `${count.toLocaleString()}자`;
+  refs.characterCount.textContent = max
+    ? t("source.character_count_max", { count: formatNumber(count), max: formatNumber(max) })
+    : t("source.character_count", { count: formatNumber(count) });
 }
 
-function updateSaveState() {
+function updateSaveState(updateStatus = true) {
   const saving = refs.saveHistory.checked;
-  refs.saveHint.textContent = saving ? "암호화하여 로컬에 보관" : "이번 번역은 저장하지 않음";
-  refs.historyState.textContent = saving ? "기록 저장 켜짐" : "비공개 번역 모드";
+  refs.saveHint.textContent = saving ? t("save.on") : t("save.off");
+  if (updateStatus) setHistoryState(saving ? "history.save_on" : "history.private_mode");
 }
 
 function updateModelDescription() {
   const model = state.config?.models.find((candidate) => candidate.id === refs.modelSelect.value);
   if (!model) return;
-  const privacy = model.privacy === "device" ? "이 장치에서 처리" : "개인 네트워크 장치에서 처리";
-  refs.modelDescription.textContent = `${model.description} · ${privacy}`;
+  refs.modelDescription.textContent = `${localizedModelDescription(model)} · ${localizedPrivacy(model.privacy)}`;
 }
 
 function swapLanguages() {
@@ -651,8 +853,8 @@ function clearWorkspace() {
   state.activeMemoryRevision = null;
   refs.deleteActive.hidden = true;
   updateMemoryControls();
-  setEmptyOutput("번역 결과가 여기에 표시됩니다", "모든 처리는 선택한 개인 장치 안에서 이루어집니다.");
-  refs.historyState.textContent = refs.saveHistory.checked ? "기록 저장 켜짐" : "비공개 번역 모드";
+  setEmptyOutput(t("output.empty_title"), t("output.empty_subtitle"));
+  setHistoryState(refs.saveHistory.checked ? "history.save_on" : "history.private_mode");
   renderQa([]);
   updateCharacterCount();
   refs.sourceText.focus();
@@ -662,16 +864,16 @@ function clearWorkspace() {
 async function copyOutput() {
   const text = refs.translatedText.value;
   if (!text) {
-    showToast("복사할 번역문이 없습니다.", true);
+    showToast(t("copy.empty"), true);
     return;
   }
   try {
     await navigator.clipboard.writeText(text);
-    showToast("번역문을 복사했습니다.");
+    showToast(t("copy.done"));
   } catch {
     refs.translatedText.select();
     document.execCommand("copy");
-    showToast("번역문을 복사했습니다.");
+    showToast(t("copy.done"));
   }
 }
 
@@ -693,7 +895,7 @@ function emptyMessage(message) {
 }
 
 function languageLabel(code) {
-  return LANGUAGE_NAMES[code] || code;
+  return localizedLanguageName(code);
 }
 
 function formatDay(timestamp) {
@@ -701,18 +903,26 @@ function formatDay(timestamp) {
   const today = new Date();
   const yesterday = new Date();
   yesterday.setDate(today.getDate() - 1);
-  if (date.toDateString() === today.toDateString()) return "오늘";
-  if (date.toDateString() === yesterday.toDateString()) return "어제";
-  return new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric" }).format(date);
+  if (date.toDateString() === today.toDateString()) return t("date.today");
+  if (date.toDateString() === yesterday.toDateString()) return t("date.yesterday");
+  return new Intl.DateTimeFormat(i18n.getLocale(), { month: "long", day: "numeric" }).format(date);
 }
 
 function formatTime(timestamp) {
-  return new Intl.DateTimeFormat("ko-KR", { hour: "2-digit", minute: "2-digit" }).format(new Date(timestamp));
+  return new Intl.DateTimeFormat(i18n.getLocale(), { hour: "2-digit", minute: "2-digit" }).format(
+    new Date(timestamp),
+  );
 }
 
 function formatLatency(milliseconds) {
-  if (milliseconds < 1000) return `${milliseconds}ms`;
-  return `${(milliseconds / 1000).toFixed(1)}초`;
+  if (milliseconds < 1000) return t("latency.ms", { value: formatNumber(milliseconds) });
+  return t("latency.seconds", {
+    value: new Intl.NumberFormat(i18n.getLocale(), { maximumFractionDigits: 1 }).format(milliseconds / 1000),
+  });
+}
+
+function formatNumber(value) {
+  return new Intl.NumberFormat(i18n.getLocale()).format(value);
 }
 
 function showToast(message, error = false) {
@@ -733,7 +943,11 @@ async function api(path, options = {}) {
   const contentType = response.headers.get("content-type") || "";
   const body = contentType.includes("application/json") ? await response.json() : null;
   if (!response.ok) {
-    throw new Error(body?.error?.message || `요청을 처리할 수 없습니다 (${response.status})`);
+    const code = body?.error?.code;
+    const fallback = body?.error?.message || t("error.generic", { status: response.status });
+    const error = new Error(code ? t(`error.${code}`, { status: response.status }, fallback) : fallback);
+    error.code = code;
+    throw error;
   }
   return body;
 }

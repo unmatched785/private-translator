@@ -80,7 +80,7 @@ impl HistoryStore {
         let mut connection = self.connection.lock().expect("history mutex poisoned");
         let transaction = connection
             .transaction()
-            .context("번역 자산 승인을 시작할 수 없습니다")?;
+            .context("Could not begin translation asset approval")?;
         transaction
             .execute(
                 "INSERT INTO translation_memory
@@ -88,7 +88,7 @@ impl HistoryStore {
                  VALUES (?1, ?2, ?3, ?3, ?4)",
                 params![id, history_id, created_at, revision],
             )
-            .context("승인 번역 자산을 만들 수 없습니다")?;
+            .context("Could not create the approved translation asset")?;
         transaction
             .execute(
                 "INSERT INTO translation_memory_revisions
@@ -96,10 +96,10 @@ impl HistoryStore {
                  VALUES (?1, ?2, ?3, ?4, ?5)",
                 params![id, revision, created_at, nonce, ciphertext],
             )
-            .context("승인 번역 자산의 첫 버전을 저장할 수 없습니다")?;
+            .context("Could not save the first approved translation asset revision")?;
         transaction
             .commit()
-            .context("승인 번역 자산을 완료할 수 없습니다")?;
+            .context("Could not commit the approved translation asset")?;
 
         Ok(Some(memory_record(
             id,
@@ -126,7 +126,7 @@ impl HistoryStore {
                 read_memory_row,
             )
             .optional()
-            .context("번역 자산을 읽을 수 없습니다")?;
+            .context("Could not read the translation asset")?;
         drop(connection);
         row.map(|row| self.decrypt_memory_row(row)).transpose()
     }
@@ -142,12 +142,12 @@ impl HistoryStore {
                    ON r.memory_id = m.id AND r.revision = m.current_revision
                  ORDER BY m.updated_at DESC LIMIT ?1",
             )
-            .context("번역 자산 목록 조회를 준비할 수 없습니다")?;
+            .context("Could not prepare the translation asset list query")?;
         let rows = statement
             .query_map([limit.clamp(1, 500) as i64], read_memory_row)
-            .context("번역 자산 목록을 조회할 수 없습니다")?
+            .context("Could not query translation assets")?
             .collect::<rusqlite::Result<Vec<_>>>()
-            .context("번역 자산 행을 읽을 수 없습니다")?;
+            .context("Could not read a translation asset row")?;
         drop(statement);
         drop(connection);
         rows.into_iter()
@@ -166,7 +166,7 @@ impl HistoryStore {
         let revision = current
             .revision
             .checked_add(1)
-            .context("번역 자산 버전 번호가 너무 큽니다")?;
+            .context("The translation asset revision number is too large")?;
         let revision_created_at = now_unix_ms();
         let payload = EncryptedMemoryPayload {
             revision_kind: "edited".into(),
@@ -187,7 +187,7 @@ impl HistoryStore {
         let mut connection = self.connection.lock().expect("history mutex poisoned");
         let transaction = connection
             .transaction()
-            .context("번역 자산 수정을 시작할 수 없습니다")?;
+            .context("Could not begin the translation asset revision")?;
         transaction
             .execute(
                 "INSERT INTO translation_memory_revisions
@@ -195,7 +195,7 @@ impl HistoryStore {
                  VALUES (?1, ?2, ?3, ?4, ?5)",
                 params![id, revision, revision_created_at, nonce, ciphertext],
             )
-            .context("번역 자산의 새 버전을 저장할 수 없습니다")?;
+            .context("Could not save the new translation asset revision")?;
         let changed = transaction
             .execute(
                 "UPDATE translation_memory
@@ -203,13 +203,15 @@ impl HistoryStore {
                  WHERE id = ?1 AND current_revision = ?4",
                 params![id, revision_created_at, revision, current.revision],
             )
-            .context("번역 자산의 현재 버전을 변경할 수 없습니다")?;
+            .context("Could not update the current translation asset revision")?;
         if changed != 1 {
-            bail!("번역 자산이 동시에 변경되어 새 버전을 적용하지 못했습니다");
+            bail!(
+                "The translation asset changed concurrently, so the new revision was not applied"
+            );
         }
         transaction
             .commit()
-            .context("번역 자산 수정을 완료할 수 없습니다")?;
+            .context("Could not commit the translation asset revision")?;
 
         Ok(Some(memory_record(
             current.id,
@@ -232,12 +234,12 @@ impl HistoryStore {
                  JOIN translation_memory_revisions r ON r.memory_id = m.id
                  WHERE m.id = ?1 ORDER BY r.revision DESC",
             )
-            .context("번역 자산 버전 조회를 준비할 수 없습니다")?;
+            .context("Could not prepare the translation asset revision query")?;
         let rows = statement
             .query_map([id], read_memory_row)
-            .context("번역 자산 버전을 조회할 수 없습니다")?
+            .context("Could not query translation asset revisions")?
             .collect::<rusqlite::Result<Vec<_>>>()
-            .context("번역 자산 버전 행을 읽을 수 없습니다")?;
+            .context("Could not read a translation asset revision row")?;
         drop(statement);
         drop(connection);
         rows.into_iter()
@@ -249,7 +251,7 @@ impl HistoryStore {
         let connection = self.connection.lock().expect("history mutex poisoned");
         let changed = connection
             .execute("DELETE FROM translation_memory WHERE id = ?1", [id])
-            .context("번역 자산을 삭제할 수 없습니다")?;
+            .context("Could not delete the translation asset")?;
         Ok(changed > 0)
     }
 
@@ -267,7 +269,7 @@ impl HistoryStore {
                 read_memory_row,
             )
             .optional()
-            .context("기록에 연결된 번역 자산을 읽을 수 없습니다")?;
+            .context("Could not read the translation asset linked to history")?;
         drop(connection);
         row.map(|row| self.decrypt_memory_row(row)).transpose()
     }
@@ -279,7 +281,8 @@ impl HistoryStore {
         created_at: i64,
         payload: &EncryptedMemoryPayload,
     ) -> Result<(Vec<u8>, Vec<u8>)> {
-        let serialized = serde_json::to_vec(payload).context("번역 자산을 직렬화할 수 없습니다")?;
+        let serialized =
+            serde_json::to_vec(payload).context("Could not serialize the translation asset")?;
         self.crypto
             .encrypt(&serialized, &memory_aad(id, revision, created_at))
     }
@@ -290,8 +293,8 @@ impl HistoryStore {
             &row.ciphertext,
             &memory_aad(&row.id, row.revision, row.revision_created_at),
         )?;
-        let payload: EncryptedMemoryPayload =
-            serde_json::from_slice(&plain).context("암호화된 번역 자산이 손상되었습니다")?;
+        let payload: EncryptedMemoryPayload = serde_json::from_slice(&plain)
+            .context("The encrypted translation asset is corrupted")?;
         Ok(memory_record(
             row.id,
             row.history_id,

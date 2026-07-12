@@ -21,24 +21,24 @@ pub struct VaultCrypto {
 
 impl VaultCrypto {
     pub fn load_or_create(data_dir: &Path) -> Result<Self> {
-        fs::create_dir_all(data_dir).context("로컬 기록 폴더를 만들 수 없습니다")?;
+        fs::create_dir_all(data_dir).context("Could not create the local vault directory")?;
         let key = load_or_create_key(data_dir)?;
         Self::from_key(&key)
     }
 
     pub fn from_key(key: &[u8]) -> Result<Self> {
         if key.len() != KEY_BYTES {
-            bail!("암호키 길이가 올바르지 않습니다");
+            bail!("The encryption key length is invalid");
         }
         let cipher = Aes256Gcm::new_from_slice(key)
-            .map_err(|_| anyhow::anyhow!("암호키를 초기화할 수 없습니다"))?;
+            .map_err(|_| anyhow::anyhow!("Could not initialize the encryption key"))?;
         Ok(Self { cipher })
     }
 
     pub fn encrypt(&self, plaintext: &[u8], aad: &[u8]) -> Result<(Vec<u8>, Vec<u8>)> {
         let mut nonce = [0_u8; NONCE_BYTES];
         getrandom::fill(&mut nonce)
-            .map_err(|error| anyhow::anyhow!("보안 난수를 만들 수 없습니다: {error}"))?;
+            .map_err(|error| anyhow::anyhow!("Could not generate secure random data: {error}"))?;
         let ciphertext = self
             .cipher
             .encrypt(
@@ -48,13 +48,13 @@ impl VaultCrypto {
                     aad,
                 },
             )
-            .map_err(|_| anyhow::anyhow!("기록을 암호화할 수 없습니다"))?;
+            .map_err(|_| anyhow::anyhow!("Could not encrypt the vault record"))?;
         Ok((nonce.to_vec(), ciphertext))
     }
 
     pub fn decrypt(&self, nonce: &[u8], ciphertext: &[u8], aad: &[u8]) -> Result<Vec<u8>> {
         if nonce.len() != NONCE_BYTES {
-            bail!("암호화 nonce가 올바르지 않습니다");
+            bail!("The encryption nonce is invalid");
         }
         self.cipher
             .decrypt(
@@ -64,7 +64,7 @@ impl VaultCrypto {
                     aad,
                 },
             )
-            .map_err(|_| anyhow::anyhow!("기록을 복호화할 수 없습니다"))
+            .map_err(|_| anyhow::anyhow!("Could not decrypt the vault record"))
     }
 }
 
@@ -72,7 +72,7 @@ impl VaultCrypto {
 fn random_key() -> Result<[u8; KEY_BYTES]> {
     let mut key = [0_u8; KEY_BYTES];
     getrandom::fill(&mut key)
-        .map_err(|error| anyhow::anyhow!("보안 암호키를 만들 수 없습니다: {error}"))?;
+        .map_err(|error| anyhow::anyhow!("Could not generate a secure encryption key: {error}"))?;
     Ok(key)
 }
 
@@ -80,37 +80,38 @@ fn random_key() -> Result<[u8; KEY_BYTES]> {
 fn load_or_create_key(data_dir: &Path) -> Result<[u8; KEY_BYTES]> {
     let path = data_dir.join("vault.key");
     if path.exists() {
-        let wrapped = fs::read(&path).context("보호된 기록 암호키를 읽을 수 없습니다")?;
+        let wrapped = fs::read(&path).context("Could not read the protected vault key")?;
         let plain = dpapi::unprotect(&wrapped)?;
         return plain
             .try_into()
-            .map_err(|_| anyhow::anyhow!("보호된 기록 암호키가 손상되었습니다"));
+            .map_err(|_| anyhow::anyhow!("The protected vault key is corrupted"));
     }
 
     let key = random_key()?;
     let wrapped = dpapi::protect(&key)?;
-    fs::write(&path, wrapped).context("보호된 기록 암호키를 저장할 수 없습니다")?;
+    fs::write(&path, wrapped).context("Could not save the protected vault key")?;
     Ok(key)
 }
 
 #[cfg(not(windows))]
 fn load_or_create_key(data_dir: &Path) -> Result<[u8; KEY_BYTES]> {
     let passphrase = env::var("TRANSLATOR_VAULT_PASSPHRASE")
-        .context("Windows 외 환경에서는 TRANSLATOR_VAULT_PASSPHRASE가 반드시 필요합니다")?;
+        .context("TRANSLATOR_VAULT_PASSPHRASE is required outside Windows")?;
     let salt_path = data_dir.join("vault.salt");
     let salt = if salt_path.exists() {
-        fs::read(&salt_path).context("기록 암호화 salt를 읽을 수 없습니다")?
+        fs::read(&salt_path).context("Could not read the vault encryption salt")?
     } else {
         let mut salt = [0_u8; 16];
-        getrandom::fill(&mut salt)
-            .map_err(|error| anyhow::anyhow!("기록 암호화 salt를 만들 수 없습니다: {error}"))?;
-        fs::write(&salt_path, salt).context("기록 암호화 salt를 저장할 수 없습니다")?;
+        getrandom::fill(&mut salt).map_err(|error| {
+            anyhow::anyhow!("Could not generate the vault encryption salt: {error}")
+        })?;
+        fs::write(&salt_path, salt).context("Could not save the vault encryption salt")?;
         salt.to_vec()
     };
     let mut key = [0_u8; KEY_BYTES];
     Argon2::default()
         .hash_password_into(passphrase.as_bytes(), &salt, &mut key)
-        .map_err(|_| anyhow::anyhow!("기록 암호키를 파생할 수 없습니다"))?;
+        .map_err(|_| anyhow::anyhow!("Could not derive the vault encryption key"))?;
     Ok(key)
 }
 
@@ -168,7 +169,7 @@ mod dpapi {
         let input_len: u32 = input
             .len()
             .try_into()
-            .context("암호키 데이터가 너무 큽니다")?;
+            .context("The encryption key data is too large")?;
         let input_blob = DataBlob {
             cb_data: input_len,
             pb_data: input.as_ptr() as *mut u8,
@@ -203,7 +204,7 @@ mod dpapi {
         };
 
         if ok == 0 {
-            bail!("Windows 사용자 계정으로 기록 암호키를 보호할 수 없습니다");
+            bail!("Could not protect the vault key with the current Windows account");
         }
 
         let output = unsafe {

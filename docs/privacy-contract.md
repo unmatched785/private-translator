@@ -1,24 +1,25 @@
 # Privacy Contract
 
-Private Translator가 지켜야 하는 비가역적 제품 원칙이다.
+These are non-negotiable product rules for Private Translator.
 
-1. 번역 원문과 번역문을 인터넷 서비스로 자동 전송하지 않는다.
-2. 번역 내용은 URL, 접근 로그, 충돌 로그, 텔레메트리에 포함하지 않는다.
-3. 기록 저장은 기본으로 켜되, 사용자가 요청별로 끌 수 있다.
-4. 저장한 기록의 내용과 처리 메타데이터는 인증 암호화한다.
-5. Windows 기록 암호키는 사용자 계정 범위로 보호한다.
-6. 브라우저 저장소는 비민감 환경 설정에만 사용한다.
-7. 캐시 삭제와 모델 교체가 기록 삭제로 이어져서는 안 된다.
-8. 업데이트와 일반 제거는 기록고를 자동 삭제하지 않는다.
-9. 삭제, 평문 내보내기, 외부 모델 연결은 사용자의 명시적 동작이 있어야 한다.
-10. 개인 네트워크 모델은 화면에 경계를 명확하게 표시한다.
-11. 클라우드 모델은 기본 경로와 자동 폴백에 포함하지 않는다.
-12. 향후 기록을 학습이나 용어집 제안에 사용할 때도 로컬 처리와 명시적 승인을 지킨다.
-13. 일반 번역 기록을 자동으로 번역 자산으로 승격하지 않는다.
-14. 승인 자산 수정은 이전 버전을 보존하며, 기록 삭제와 자산 삭제를 별도 동작으로 구분한다.
+1. Never send source text or translated text to an internet service automatically.
+2. Never include translation content in URLs, access logs, crash logs, or telemetry.
+3. Keep history saving on by default, but let the user disable it per request.
+4. Protect saved content and processing metadata with authenticated encryption.
+5. Protect the Windows vault key within the current user account boundary.
+6. Use browser storage only for non-sensitive preferences.
+7. Never make cache deletion or model replacement delete user history.
+8. Never make a normal update or uninstall silently delete the vault.
+9. Require an explicit user action for deletion, plaintext export, or connection to another model device.
+10. Clearly show when a model runs on a private network device instead of this device.
+11. Never include a cloud model in the default path or an automatic fallback.
+12. Any future use of history for learning or terminology suggestions must remain local and require explicit approval.
+13. Never promote ordinary history into an approved translation asset automatically.
+14. Preserve previous revisions when an approved asset is edited, and keep history deletion separate from asset deletion.
+15. Derive the selectable translation-language list from the active model's declared capability instead of pretending that every model supports every language.
 
 ## Threat boundary
 
-현재 MVP는 디스크에 남은 DB 파일을 다른 Windows 사용자나 단순 파일 열람자가 읽는 것을 막는다. 로그인된 사용자 권한으로 실행되는 악성 프로그램, 화면 캡처, 키로거, OS 관리자, 메모리 덤프까지 방어하는 보안 제품은 아니다.
+The current product protects database content at rest from casual file inspection and other Windows users. It is not a security product against malware running with the logged-in user's permissions, browser extensions that can inspect local pages, screen capture, keyloggers, operating-system administrators, or memory dumps.
 
-이 한계는 UI의 개인정보 보호 설명에서 과장 없이 표현해야 한다.
+The interface and documentation must describe this limitation without exaggerating the protection.

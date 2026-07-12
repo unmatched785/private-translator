@@ -75,7 +75,7 @@ pub async fn translate_once(
     max_tokens: usize,
 ) -> Result<ChunkTranslation> {
     if max_tokens < 64 {
-        bail!("번역 결과를 위한 모델 컨텍스트가 부족합니다");
+        bail!("The model context has insufficient space for a translation result");
     }
 
     match model.family {
@@ -93,6 +93,19 @@ pub fn privacy_label(boundary: PrivacyBoundary) -> &'static str {
     match boundary {
         PrivacyBoundary::Device => "device",
         PrivacyBoundary::PrivateNetwork => "private_network",
+    }
+}
+
+pub const HY_MT2_SUPPORTED_LANGUAGES: &[&str] = &[
+    "ko", "en", "ja", "zh", "zh-Hant", "fr", "de", "es", "pt", "it", "ru", "ar", "tr", "th", "vi",
+    "id", "ms", "tl", "hi", "pl", "cs", "nl", "uk", "he", "fa", "bn", "ta", "te", "mr", "gu", "ur",
+    "km", "my", "bo", "kk", "mn", "ug", "yue",
+];
+
+pub fn supported_language_codes(family: ModelFamily) -> &'static [&'static str] {
+    match family {
+        ModelFamily::HyMt2 | ModelFamily::Mock => HY_MT2_SUPPORTED_LANGUAGES,
+        ModelFamily::Translategemma => &[],
     }
 }
 
@@ -120,11 +133,16 @@ async fn call_openai_compatible(
         .json(&body)
         .send()
         .await
-        .with_context(|| format!("번역 엔진에 연결할 수 없습니다: {}", model.label))?;
+        .with_context(|| {
+            format!(
+                "Could not connect to the translation engine: {}",
+                model.label
+            )
+        })?;
 
     if !response.status().is_success() {
         bail!(
-            "번역 엔진이 오류를 반환했습니다: {} ({})",
+            "The translation engine returned an error: {} ({})",
             model.label,
             response.status()
         );
@@ -133,15 +151,15 @@ async fn call_openai_compatible(
     let response: ChatResponse = response
         .json()
         .await
-        .context("번역 엔진 응답 형식이 올바르지 않습니다")?;
+        .context("The translation engine response format is invalid")?;
     let choice = response
         .choices
         .into_iter()
         .next()
-        .context("번역 엔진이 결과를 반환하지 않았습니다")?;
+        .context("The translation engine returned no result")?;
     let text = choice.message.content.trim().to_owned();
     if text.is_empty() {
-        bail!("번역 엔진이 빈 결과를 반환했습니다");
+        bail!("The translation engine returned an empty result");
     }
     Ok(ChunkTranslation {
         translated_text: text,
@@ -166,16 +184,16 @@ async fn count_openai_chat_tokens(
         }))
         .send()
         .await
-        .context("모델 토큰 수를 계산할 수 없습니다")?;
+        .context("Could not count model input tokens")?;
     if !response.status().is_success() {
-        bail!("모델 토큰 계산 API를 사용할 수 없습니다");
+        bail!("The model token-counting API is unavailable");
     }
     let count: TokenCountResponse = response
         .json()
         .await
-        .context("모델 토큰 계산 응답이 올바르지 않습니다")?;
+        .context("The model token-counting response is invalid")?;
     if count.input_tokens == 0 {
-        bail!("모델 토큰 계산 결과가 비어 있습니다");
+        bail!("The model token-counting result is empty");
     }
     Ok(count.input_tokens)
 }
@@ -213,27 +231,27 @@ pub(crate) fn mock_translate(text: &str, target: &str) -> String {
         ("hello world", "ko") | ("hello, world", "ko") => "안녕하세요, 세계!".into(),
         ("thank you", "ko") => "감사합니다.".into(),
         ("안녕하세요", "en") => "Hello.".into(),
-        _ => format!("[로컬 데모 · {}] {trimmed}", language_name(target)),
+        _ => format!("[Local demo · {}] {trimmed}", language_name(target)),
     }
 }
 
 pub fn qa_warnings(source: &str, translated: &str) -> Vec<String> {
     let mut warnings = Vec::new();
     if translated.trim().is_empty() {
-        warnings.push("번역 결과가 비어 있습니다".into());
+        warnings.push("empty_result".into());
         return warnings;
     }
 
     let source_numbers = extract_matches(number_regex(), source);
     let translated_numbers = extract_matches(number_regex(), translated);
     if !source_numbers.is_subset(&translated_numbers) {
-        warnings.push("원문의 숫자 또는 단위가 번역문과 다를 수 있습니다".into());
+        warnings.push("number_mismatch".into());
     }
 
     let source_urls = extract_urls(source);
     let translated_urls = extract_urls(translated);
     if source_urls != translated_urls {
-        warnings.push("URL이 누락되거나 변경되었을 수 있습니다".into());
+        warnings.push("url_mismatch".into());
     }
     warnings
 }
@@ -358,6 +376,19 @@ mod tests {
             "https://intranet.example.com에서 여세요.",
         );
         assert!(warnings.is_empty());
+    }
+
+    #[test]
+    fn hy_mt2_capabilities_have_unique_named_language_codes() {
+        let unique = HY_MT2_SUPPORTED_LANGUAGES
+            .iter()
+            .copied()
+            .collect::<BTreeSet<_>>();
+        assert_eq!(HY_MT2_SUPPORTED_LANGUAGES.len(), 38);
+        assert_eq!(unique.len(), HY_MT2_SUPPORTED_LANGUAGES.len());
+        for code in HY_MT2_SUPPORTED_LANGUAGES {
+            assert_ne!(language_name(code), "the selected language");
+        }
     }
 
     #[test]

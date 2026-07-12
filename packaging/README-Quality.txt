@@ -1,27 +1,23 @@
 Private Translator Quality 0.1.0
 ===================================
 
-사용법
-1. PrivateTranslator-Quality.exe를 더블클릭합니다.
-2. 잠시 뒤 기본 브라우저에서 번역 화면이 열립니다.
-3. 기본 Hy-MT2 1.8B 모델은 즉시 사용할 수 있습니다.
-4. 모델 선택 메뉴에서 7B/12B 모델을 고를 수 있지만, 해당 모델팩 또는 개인 서버를 먼저 연결해야 합니다.
-5. 사용을 마치면 프로그램 창을 닫습니다. 이 PC에서 시작한 모델 엔진도 함께 종료됩니다.
+RUN
+1. Double-click PrivateTranslator-Quality.exe.
+2. Wait for the translation page to open in your default browser.
+3. The bundled Hy-MT2 1.8B model works immediately.
+4. The optional Hy-MT2 7B entry requires a compatible private model server.
+5. Close the console window when finished. Any model process started by this app closes with it.
 
-기본 모델 주소
-- Hy-MT2 1.8B: http://127.0.0.1:8080/v1 (자동 시작)
-- Hy-MT2 7B: http://127.0.0.1:8081/v1 (추가 모델팩/개인 서버)
-- TranslateGemma 12B: http://127.0.0.1:8082/v1 (추가 모델팩/개인 서버)
+MODEL ENDPOINTS
+- Hy-MT2 1.8B: http://127.0.0.1:8080/v1 (managed automatically)
+- Hy-MT2 7B: http://127.0.0.1:8081/v1 (optional private endpoint)
 
-개인정보 보호
-- 외부 인터넷 API는 기본값에 없으며 자동 폴백도 하지 않습니다.
-- 개인 서버는 loopback, 사설 IP, .local 또는 Tailscale 대역만 허용합니다.
-- 모든 번역 기록은 이 Windows PC의 암호화 기록고에 저장됩니다.
-- 승인한 번역 자산과 수정 버전도 같은 기록고에 암호화해 저장됩니다.
-- 기록 기본 위치: %LOCALAPPDATA%\PrivateTranslator
+PRIVACY
+- There is no external internet API or automatic cloud fallback.
+- Custom private servers are restricted to loopback, private IP, .local, single-label, or Tailscale CGNAT addresses.
+- History and approved translation asset revisions stay in this Windows PC's encrypted vault.
+- Default data location: %LOCALAPPDATA%\PrivateTranslator
 
-무결성
-- 시작할 때 기본 모델과 런타임 파일의 SHA-256 및 실제 모델 ID를 확인합니다.
-
-주의
-- 현재 개발 빌드는 코드 서명이 되어 있지 않습니다. 배포 전 정식 코드 서명이 필요합니다.
+NOTICE
+The first release does not include the much larger 7B model pack.
+This release is not code-signed. Windows may show an unknown-publisher warning.

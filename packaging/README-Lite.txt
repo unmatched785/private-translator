@@ -1,26 +1,27 @@
 Private Translator Lite 0.1.0
 ================================
 
-사용법
-1. PrivateTranslator-Lite.exe를 더블클릭합니다.
-2. 잠시 뒤 기본 브라우저에서 번역 화면이 열립니다.
-3. 프로그램 창을 열어 둔 채 브라우저에서 사용합니다.
-4. 사용을 마치면 프로그램 창을 닫습니다. 모델 엔진도 함께 종료됩니다.
+RUN
+1. Double-click PrivateTranslator-Lite.exe.
+2. Wait for the translation page to open in your default browser.
+3. Keep the console window open while using the browser interface.
+4. Close the console window when finished. The managed model process closes with it.
 
-개인정보 보호
-- 번역 요청은 127.0.0.1 안에서만 처리되며 인터넷 번역 API로 전송되지 않습니다.
-- 번역 기록은 현재 Windows 사용자 계정으로 보호한 AES-256-GCM 암호문으로 저장됩니다.
-- 기록 저장 스위치를 끈 요청은 기록 DB에 넣지 않습니다.
-- 좋은 번역은 별도 자산으로 승인하고, 수정할 때마다 이전 버전을 암호화해 보존합니다.
-- 기록 기본 위치: %LOCALAPPDATA%\PrivateTranslator
-- 프로그램 폴더를 삭제해도 기록은 자동 삭제하지 않습니다.
+PRIVACY
+- Translation requests stay on 127.0.0.1 and are not sent to an internet translation API.
+- Saved content is encrypted with AES-256-GCM, using a key protected for the current Windows account.
+- Turning off Save history prevents that request from entering the vault.
+- Approved translation assets keep encrypted revisions separately from ordinary history.
+- Default data location: %LOCALAPPDATA%\PrivateTranslator
+- Removing this program folder does not silently delete the vault.
 
-구성
-- Hy-MT2 1.8B Q4_K_M (일반 노트북 CPU용)
-- llama.cpp b9966 Windows x64 CPU 런타임
-- 인터넷 연결 없이 실행 가능
-- 시작할 때 모델과 런타임 파일의 SHA-256 및 실제 모델 ID 확인
+INCLUDED COMPONENTS
+- Hy-MT2 1.8B Q4_K_M for laptop CPUs
+- llama.cpp b9966 Windows x64 CPU runtime
+- No internet connection required after download
+- Model and runtime SHA-256 verification before launch
+- Loaded model identity verification before translation
 
-주의
-- 현재 개발 빌드는 코드 서명이 되어 있지 않습니다. 배포 전 정식 코드 서명이 필요합니다.
-- 처음 모델을 준비하는 동안 수 초가 걸릴 수 있습니다.
+NOTICE
+This release is not code-signed. Windows may show an unknown-publisher warning.
+Model startup can take several seconds.

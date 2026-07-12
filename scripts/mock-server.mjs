@@ -8,6 +8,11 @@ import path from "node:path";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const records = [];
 const memories = [];
+const supportedLanguages = [
+  "ko", "en", "ja", "zh", "zh-Hant", "fr", "de", "es", "pt", "it", "ru", "ar", "tr", "th",
+  "vi", "id", "ms", "tl", "hi", "pl", "cs", "nl", "uk", "he", "fa", "bn", "ta", "te", "mr",
+  "gu", "ur", "km", "my", "bo", "kk", "mn", "ug", "yue",
+];
 
 const config = {
   profile: "demo",
@@ -17,15 +22,17 @@ const config = {
   models: [
     {
       id: "local-demo",
-      label: "로컬 데모 엔진",
-      description: "화면과 기록 동작을 확인하는 개발용 엔진",
+      label: "Local demo engine",
+      description: "Development engine for testing the interface and vault",
       privacy: "device",
+      supported_languages: supportedLanguages,
     },
     {
       id: "hy-mt2-7b-preview",
-      label: "Hy-MT2 7B · 선택 화면 미리보기",
-      description: "Quality 프로필의 모델 선택 화면을 확인하는 항목",
+      label: "Hy-MT2 7B · Interface preview",
+      description: "Preview entry for the Quality profile model selector",
       privacy: "private_network",
+      supported_languages: supportedLanguages,
     },
   ],
 };
@@ -40,6 +47,9 @@ const server = http.createServer(async (request, response) => {
     }
     if (request.method === "GET" && url.pathname === "/app.js") {
       return file(response, "web/app.js", "application/javascript; charset=utf-8");
+    }
+    if (request.method === "GET" && url.pathname === "/i18n.js") {
+      return file(response, "web/i18n.js", "application/javascript; charset=utf-8");
     }
     if (request.method === "GET" && url.pathname === "/styles.css") {
       return file(response, "web/styles.css", "text/css; charset=utf-8");
@@ -71,7 +81,7 @@ const server = http.createServer(async (request, response) => {
           source_lang: body.source || "auto",
           target_lang: body.target,
           model_id: body.model,
-          model_label: config.models.find((model) => model.id === body.model)?.label || "로컬 데모",
+          model_label: config.models.find((model) => model.id === body.model)?.label || "Local demo",
           mode: body.mode || "instant",
           privacy: "device",
           latency_ms: Math.max(24, Date.now() - started),
@@ -86,7 +96,7 @@ const server = http.createServer(async (request, response) => {
         source: body.source,
         target: body.target,
         model_id: body.model,
-        model_label: config.models.find((model) => model.id === body.model)?.label || "로컬 데모",
+        model_label: config.models.find((model) => model.id === body.model)?.label || "Local demo",
         privacy: "device",
         latency_ms: 180,
         chunk_count: 1,
@@ -111,7 +121,7 @@ const server = http.createServer(async (request, response) => {
     const favoriteMatch = url.pathname.match(/^\/api\/history\/([^/]+)\/favorite$/);
     if (request.method === "PATCH" && favoriteMatch) {
       const record = records.find((item) => item.id === decodeURIComponent(favoriteMatch[1]));
-      if (!record) return json(response, 404, { error: { message: "기록을 찾을 수 없습니다" } });
+      if (!record) return apiError(response, 404, "history_not_found", "The translation record was not found.");
       const body = await readJson(request);
       record.favorite = Boolean(body.favorite);
       response.writeHead(204);
@@ -121,7 +131,7 @@ const server = http.createServer(async (request, response) => {
     const approveMatch = url.pathname.match(/^\/api\/history\/([^/]+)\/approve$/);
     if (request.method === "POST" && approveMatch) {
       const record = records.find((item) => item.id === decodeURIComponent(approveMatch[1]));
-      if (!record) return json(response, 404, { error: { message: "기록을 찾을 수 없습니다" } });
+      if (!record) return apiError(response, 404, "history_not_found", "The translation record was not found.");
       let memory = memories.find((item) => item.history_id === record.id);
       if (!memory) {
         const now = Date.now();
@@ -147,7 +157,7 @@ const server = http.createServer(async (request, response) => {
     const revisionsMatch = url.pathname.match(/^\/api\/memory\/([^/]+)\/revisions$/);
     if (request.method === "GET" && revisionsMatch) {
       const memory = memories.find((item) => item.id === decodeURIComponent(revisionsMatch[1]));
-      if (!memory) return json(response, 404, { error: { message: "번역 자산을 찾을 수 없습니다" } });
+      if (!memory) return apiError(response, 404, "memory_not_found", "The translation asset was not found.");
       return json(response, 200, { records: [...memory.revisions].reverse() });
     }
 
@@ -155,7 +165,7 @@ const server = http.createServer(async (request, response) => {
     if (memoryMatch) {
       const memoryId = decodeURIComponent(memoryMatch[1]);
       const memory = memories.find((item) => item.id === memoryId);
-      if (!memory) return json(response, 404, { error: { message: "번역 자산을 찾을 수 없습니다" } });
+      if (!memory) return apiError(response, 404, "memory_not_found", "The translation asset was not found.");
       if (request.method === "GET") return json(response, 200, publicMemory(memory));
       if (request.method === "PUT") {
         const body = await readJson(request);
@@ -190,7 +200,7 @@ const server = http.createServer(async (request, response) => {
     const historyMatch = url.pathname.match(/^\/api\/history\/([^/]+)$/);
     if (request.method === "DELETE" && historyMatch) {
       const index = records.findIndex((item) => item.id === decodeURIComponent(historyMatch[1]));
-      if (index < 0) return json(response, 404, { error: { message: "기록을 찾을 수 없습니다" } });
+      if (index < 0) return apiError(response, 404, "history_not_found", "The translation record was not found.");
       const memory = memories.find((item) => item.history_id === records[index].id);
       if (memory) memory.history_id = null;
       records.splice(index, 1);
@@ -198,9 +208,9 @@ const server = http.createServer(async (request, response) => {
       return response.end();
     }
 
-    return json(response, 404, { error: { message: "경로를 찾을 수 없습니다" } });
+    return apiError(response, 404, "route_not_found", "The requested path was not found.");
   } catch (error) {
-    return json(response, 500, { error: { message: error.message } });
+    return apiError(response, 500, "storage_error", error.message);
   }
 });
 
@@ -221,6 +231,10 @@ function json(response, status, body) {
   response.end(JSON.stringify(body));
 }
 
+function apiError(response, status, code, message) {
+  return json(response, status, { error: { code, message } });
+}
+
 async function readJson(request) {
   const chunks = [];
   for await (const chunk of request) chunks.push(chunk);
@@ -237,7 +251,7 @@ function mockTranslate(text, target) {
     ["en", "English"],
     ["ja", "日本語"],
   ]).get(target) || target;
-  return `[로컬 데모 · ${label}] ${String(text).trim()}`;
+  return `[Local demo · ${label}] ${String(text).trim()}`;
 }
 
 function publicMemory(memory) {

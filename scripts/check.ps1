@@ -1,7 +1,10 @@
 $ErrorActionPreference = "Stop"
-$env:CARGO_HOME = Join-Path (Get-Location) ".cache\cargo"
+if (-not $env:CARGO_HOME) {
+    $env:CARGO_HOME = Join-Path (Get-Location) ".cache\cargo"
+}
 cargo fmt --all -- --check
-cargo test
-cargo clippy --all-targets -- -D warnings
+cargo test --locked --all-targets
+cargo clippy --locked --all-targets -- -D warnings
 node --check .\web\app.js
-
+node --check .\web\i18n.js
+node --check .\scripts\mock-server.mjs

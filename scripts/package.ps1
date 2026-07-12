@@ -67,6 +67,7 @@ function New-PortableProfile {
         [Parameter(Mandatory)] [string] $Folder,
         [Parameter(Mandatory)] [string] $Executable,
         [Parameter(Mandatory)] [string] $Readme,
+        [Parameter(Mandatory)] [string] $KoreanReadme,
         [Parameter(Mandatory)] [string] $Config
     )
 
@@ -84,6 +85,8 @@ function New-PortableProfile {
     Copy-Item -LiteralPath $binary -Destination (Join-Path $destination $Executable) -Force
     Copy-Item -Path (Join-Path $runtime "*") -Destination $runtimeDestination -Recurse -Force
     Copy-Item -LiteralPath (Join-Path $root "packaging\$Readme") -Destination (Join-Path $destination "README.txt") -Force
+    Copy-Item -LiteralPath (Join-Path $root "packaging\$KoreanReadme") -Destination (Join-Path $destination "README.ko.txt") -Force
+    Copy-Item -LiteralPath (Join-Path $root "LICENSE") -Destination $destination -Force
     Copy-Item -LiteralPath (Join-Path $root "packaging\component-manifest.json") -Destination $destination -Force
     Copy-Item -LiteralPath $trustedManifestPath -Destination $destination -Force
     Copy-Item -LiteralPath (Join-Path $root "THIRD_PARTY_NOTICES.md") -Destination $destination -Force
@@ -104,8 +107,8 @@ function New-PortableProfile {
 }
 
 New-Item -ItemType Directory -Force -Path $dist | Out-Null
-New-PortableProfile -Folder "PrivateTranslator-Lite" -Executable "PrivateTranslator-Lite.exe" -Readme "README-Lite.txt" -Config "lite.json"
-New-PortableProfile -Folder "PrivateTranslator-Quality" -Executable "PrivateTranslator-Quality.exe" -Readme "README-Quality.txt" -Config "quality.json"
+New-PortableProfile -Folder "PrivateTranslator-Lite" -Executable "PrivateTranslator-Lite.exe" -Readme "README-Lite.txt" -KoreanReadme "README-Lite.ko.txt" -Config "lite.json"
+New-PortableProfile -Folder "PrivateTranslator-Quality" -Executable "PrivateTranslator-Quality.exe" -Readme "README-Quality.txt" -KoreanReadme "README-Quality.ko.txt" -Config "quality.json"
 
 Get-ChildItem -Path $dist -Filter "PrivateTranslator-*.exe" -Recurse |
     Select-Object FullName, Length
