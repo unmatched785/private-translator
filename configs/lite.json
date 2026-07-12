@@ -16,8 +16,8 @@
   "models": [
     {
       "id": "hy-mt2-1.8b-q4",
-      "label": "Hy-MT2 1.8B · 빠른 로컬",
-      "description": "일반 사무용 노트북 CPU를 위한 기본 모델",
+      "label": "Hy-MT2 1.8B · Fast local",
+      "description": "A lightweight CPU model for everyday laptops",
       "endpoint": "http://127.0.0.1:8080/v1",
       "api_model": "hy-mt2-1.8b",
       "family": "hy_mt2",

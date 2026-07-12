@@ -80,12 +80,11 @@ impl LaunchOptions {
         while let Some(arg) = args.next() {
             match arg.as_str() {
                 "--profile" => {
-                    profile = args.next().context("--profile 뒤에 이름이 필요합니다")?;
+                    profile = args.next().context("--profile requires a name")?;
                 }
                 "--config" => {
                     config_path = Some(PathBuf::from(
-                        args.next()
-                            .context("--config 뒤에 파일 경로가 필요합니다")?,
+                        args.next().context("--config requires a file path")?,
                     ));
                 }
                 "--open" => open_override = Some(true),
@@ -96,19 +95,20 @@ impl LaunchOptions {
                     );
                     std::process::exit(0);
                 }
-                other => bail!("알 수 없는 옵션: {other}"),
+                other => bail!("Unknown option: {other}"),
             }
         }
 
         let raw = if let Some(path) = config_path {
-            fs::read_to_string(&path)
-                .with_context(|| format!("설정 파일을 읽을 수 없습니다: {}", path.display()))?
+            fs::read_to_string(&path).with_context(|| {
+                format!("Could not read the configuration file: {}", path.display())
+            })?
         } else {
             embedded_profile(&profile)?.to_owned()
         };
 
         let config: AppConfig =
-            serde_json::from_str(&raw).context("설정 JSON이 올바르지 않습니다")?;
+            serde_json::from_str(&raw).context("The configuration JSON is invalid")?;
         config.validate()?;
         let open_browser = open_override.unwrap_or(config.auto_open);
 
@@ -142,64 +142,70 @@ fn profile_from_executable_name(name: &str) -> &'static str {
 impl AppConfig {
     pub fn validate(&self) -> Result<()> {
         if self.models.is_empty() {
-            bail!("최소 한 개의 번역 모델이 필요합니다");
+            bail!("At least one translation model is required");
         }
         if !self
             .models
             .iter()
             .any(|model| model.id == self.default_model)
         {
-            bail!("default_model이 models에 없습니다: {}", self.default_model);
+            bail!(
+                "default_model is not present in models: {}",
+                self.default_model
+            );
         }
         if !self.bind.starts_with("127.0.0.1:") && !self.bind.starts_with("[::1]:") {
-            bail!("MVP는 개인정보 보호를 위해 loopback 주소에만 바인딩할 수 있습니다");
+            bail!("The application may bind only to a loopback address");
         }
         for model in &self.models {
             validate_model_endpoint(model)?;
             if model.top_k < -1 || model.top_k > 10_000 {
-                bail!("모델 top_k가 안전 범위를 벗어났습니다: {}", model.id);
+                bail!("Model top_k is outside the safe range: {}", model.id);
             }
             if !(0.0..=2.0).contains(&model.repeat_penalty) {
                 bail!(
-                    "모델 repeat_penalty가 안전 범위를 벗어났습니다: {}",
+                    "Model repeat_penalty is outside the safe range: {}",
                     model.id
                 );
             }
             if model.context_tokens < 512 || model.context_tokens > 131_072 {
                 bail!(
-                    "모델 context_tokens가 안전 범위를 벗어났습니다: {}",
+                    "Model context_tokens is outside the safe range: {}",
                     model.id
                 );
             }
             if model.max_output_tokens < 64 || model.max_output_tokens + 128 >= model.context_tokens
             {
                 bail!(
-                    "모델 max_output_tokens가 context_tokens에 비해 올바르지 않습니다: {}",
+                    "Model max_output_tokens is invalid for context_tokens: {}",
                     model.id
                 );
             }
         }
         if let Some(engine) = &self.local_engine {
             let model = self.model(&engine.model_id).with_context(|| {
-                format!("local_engine 모델이 models에 없습니다: {}", engine.model_id)
+                format!(
+                    "The local_engine model is not present in models: {}",
+                    engine.model_id
+                )
             })?;
             if model.family == ModelFamily::Mock || model.privacy != PrivacyBoundary::Device {
-                bail!("local_engine은 이 장치에서 실행하는 실제 모델이어야 합니다");
+                bail!("local_engine must be a real model running on this device");
             }
             if engine.executable.trim().is_empty() || engine.model_path.trim().is_empty() {
-                bail!("local_engine 실행 파일과 모델 경로가 필요합니다");
+                bail!("local_engine requires an executable and model path");
             }
             if engine.runtime_id.trim().is_empty() {
-                bail!("local_engine runtime_id가 필요합니다");
+                bail!("local_engine requires runtime_id");
             }
             if engine.context_size < 512 || engine.context_size > 131_072 {
-                bail!("local_engine context_size가 안전 범위를 벗어났습니다");
+                bail!("local_engine context_size is outside the safe range");
             }
             if engine.context_size != model.context_tokens {
-                bail!("local_engine context_size와 모델 context_tokens가 일치해야 합니다");
+                bail!("local_engine context_size must match model context_tokens");
             }
             if engine.threads > 256 {
-                bail!("local_engine threads가 안전 범위를 벗어났습니다");
+                bail!("local_engine threads is outside the safe range");
             }
         }
         Ok(())
@@ -235,24 +241,24 @@ fn validate_model_endpoint(model: &ModelConfig) -> Result<()> {
         return Ok(());
     }
     let url = reqwest::Url::parse(&model.endpoint)
-        .with_context(|| format!("모델 주소가 올바르지 않습니다: {}", model.id))?;
+        .with_context(|| format!("The model endpoint is invalid: {}", model.id))?;
     if !matches!(url.scheme(), "http" | "https") {
-        bail!("모델 주소는 http 또는 https여야 합니다: {}", model.id);
+        bail!("The model endpoint must use http or https: {}", model.id);
     }
     let host = url
         .host_str()
-        .with_context(|| format!("모델 주소에 호스트가 없습니다: {}", model.id))?;
+        .with_context(|| format!("The model endpoint has no host: {}", model.id))?;
 
     match model.privacy {
         PrivacyBoundary::Device if !is_loopback_host(host) => {
             bail!(
-                "device 모델은 이 장치의 주소만 사용할 수 있습니다: {}",
+                "A device model may use only an address on this device: {}",
                 model.id
             )
         }
         PrivacyBoundary::PrivateNetwork if !is_private_host(host) => {
             bail!(
-                "private_network 모델은 개인 네트워크 주소만 사용할 수 있습니다: {}",
+                "A private_network model may use only a private address: {}",
                 model.id
             )
         }
@@ -289,7 +295,7 @@ fn embedded_profile(profile: &str) -> Result<&'static str> {
         "lite" => Ok(include_str!("../configs/lite.json")),
         "quality" => Ok(include_str!("../configs/quality.json")),
         "demo" => Ok(include_str!("../configs/demo.json")),
-        _ => bail!("지원하지 않는 프로필입니다: {profile}"),
+        _ => bail!("Unsupported profile: {profile}"),
     }
 }
 

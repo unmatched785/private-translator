@@ -66,24 +66,25 @@ impl LocalEngine {
         };
         let model = config
             .model(&engine.model_id)
-            .context("자동 시작할 로컬 모델을 찾을 수 없습니다")?;
-        let endpoint = Url::parse(&model.endpoint).context("로컬 모델 주소가 올바르지 않습니다")?;
+            .context("The configured local model was not found")?;
+        let endpoint =
+            Url::parse(&model.endpoint).context("The local model endpoint is invalid")?;
         let health_url = health_url(&endpoint);
         let models_url = models_url(&endpoint);
 
         if probe_model_identity(client, &health_url, &models_url, &model.api_model).await? {
             println!(
-                "로컬 번역 엔진: 이미 실행 중인 확인된 모델을 사용합니다 ({}).",
+                "Local translation engine: using an already running verified model ({}).",
                 model.api_model
             );
             return Ok(Self::external());
         }
 
-        let bundle_root = bundle_root().context("신뢰할 수 있는 번역기 묶음을 찾을 수 없습니다")?;
+        let bundle_root = bundle_root().context("Could not locate a trusted translator bundle")?;
         let executable = resolve_bundle_path(&bundle_root, &engine.executable)
-            .with_context(|| format!("로컬 엔진을 찾을 수 없습니다: {}", engine.executable))?;
+            .with_context(|| format!("Could not find the local engine: {}", engine.executable))?;
         let model_path = resolve_bundle_path(&bundle_root, &engine.model_path)
-            .with_context(|| format!("로컬 모델을 찾을 수 없습니다: {}", engine.model_path))?;
+            .with_context(|| format!("Could not find the local model: {}", engine.model_path))?;
 
         let executable_for_verification = executable.clone();
         let model_for_verification = model_path.clone();
@@ -96,22 +97,22 @@ impl LocalEngine {
             )
         })
         .await
-        .context("로컬 번역 파일 검증 작업이 중단되었습니다")??;
-        println!("로컬 번역 파일 무결성: 확인됨");
+        .context("The local translation artifact verification task stopped")??;
+        println!("Local translation artifact integrity: verified");
 
         let host = endpoint
             .host_str()
-            .context("로컬 모델 주소에 호스트가 없습니다")?;
+            .context("The local model endpoint has no host")?;
         let port = endpoint
             .port()
-            .context("로컬 모델 주소에는 포트를 명시해야 합니다")?;
+            .context("The local model endpoint must include a port")?;
         let threads = engine_threads(engine);
 
         let mut command = Command::new(&executable);
         command.current_dir(
             executable
                 .parent()
-                .context("로컬 엔진 폴더를 확인할 수 없습니다")?,
+                .context("Could not resolve the local engine directory")?,
         );
         command
             .arg("-m")
@@ -143,7 +144,7 @@ impl LocalEngine {
 
         let mut child = command.spawn().with_context(|| {
             format!(
-                "로컬 번역 엔진을 시작할 수 없습니다: {}",
+                "Could not start the local translation engine: {}",
                 executable.display()
             )
         })?;
@@ -162,7 +163,7 @@ impl LocalEngine {
             match probe_model_identity(client, &health_url, &models_url, &model.api_model).await {
                 Ok(true) => {
                     println!(
-                        "로컬 번역 엔진: 준비됨 (모델 {}, {threads} threads)",
+                        "Local translation engine: ready (model {}, {threads} threads)",
                         model.api_model
                     );
                     return Ok(Self {
@@ -180,16 +181,16 @@ impl LocalEngine {
             }
             if let Some(status) = child
                 .try_wait()
-                .context("로컬 번역 엔진 상태를 확인할 수 없습니다")?
+                .context("Could not inspect the local translation engine status")?
             {
-                bail!("로컬 번역 엔진이 시작 중 종료되었습니다: {status}");
+                bail!("The local translation engine exited during startup: {status}");
             }
             sleep(Duration::from_millis(250)).await;
         }
 
         let _ = child.kill();
         let _ = child.wait();
-        bail!("로컬 번역 엔진이 45초 안에 준비되지 않았습니다");
+        bail!("The local translation engine was not ready within 45 seconds");
     }
 
     fn external() -> Self {
@@ -229,7 +230,7 @@ impl KillOnCloseJob {
         let handle = unsafe { CreateJobObjectW(ptr::null(), ptr::null()) };
         if handle.is_null() {
             bail!(
-                "로컬 엔진 종료 보호를 만들 수 없습니다: {}",
+                "Could not create local engine termination protection: {}",
                 std::io::Error::last_os_error()
             );
         }
@@ -247,7 +248,7 @@ impl KillOnCloseJob {
         };
         if configured == 0 {
             bail!(
-                "로컬 엔진 종료 보호를 설정할 수 없습니다: {}",
+                "Could not configure local engine termination protection: {}",
                 std::io::Error::last_os_error()
             );
         }
@@ -256,7 +257,7 @@ impl KillOnCloseJob {
             unsafe { AssignProcessToJobObject(job.handle, child.as_raw_handle().cast()) };
         if assigned == 0 {
             bail!(
-                "로컬 엔진을 종료 보호에 연결할 수 없습니다: {}",
+                "Could not attach the local engine to termination protection: {}",
                 std::io::Error::last_os_error()
             );
         }
@@ -306,7 +307,9 @@ async fn probe_model_identity(
     {
         Ok(response) => response,
         Err(error) if error.is_connect() || error.is_timeout() => return Ok(false),
-        Err(error) => return Err(error).context("로컬 번역 엔진 상태를 확인할 수 없습니다"),
+        Err(error) => {
+            return Err(error).context("Could not inspect the local translation engine status");
+        }
     };
 
     if !health_response.status().is_success() {
@@ -318,10 +321,10 @@ async fn probe_model_identity(
         .timeout(Duration::from_secs(2))
         .send()
         .await
-        .context("실행 중인 로컬 엔진의 모델 정보를 읽을 수 없습니다")?;
+        .context("Could not read model information from the running local engine")?;
     if !response.status().is_success() {
         bail!(
-            "로컬 엔진 포트는 사용 중이지만 모델 확인 요청이 실패했습니다: HTTP {}",
+            "The local engine port is in use, but model verification failed: HTTP {}",
             response.status()
         );
     }
@@ -329,7 +332,7 @@ async fn probe_model_identity(
     let identities: ModelsResponse = response
         .json()
         .await
-        .context("실행 중인 로컬 엔진의 모델 정보 형식이 올바르지 않습니다")?;
+        .context("The running local engine returned invalid model information")?;
     if identities
         .data
         .iter()
@@ -344,7 +347,9 @@ async fn probe_model_identity(
         .map(|identity| identity.id.as_str())
         .collect::<Vec<_>>()
         .join(", ");
-    bail!("로컬 엔진 포트에서 다른 모델이 확인되었습니다 (예상: {expected_model}, 실제: {actual})")
+    bail!(
+        "A different model is running on the local engine port (expected: {expected_model}, actual: {actual})"
+    )
 }
 
 fn engine_threads(config: &LocalEngineConfig) -> usize {
@@ -362,15 +367,22 @@ fn bundle_root() -> Result<PathBuf> {
         PathBuf::from(explicit_root)
     } else {
         env::current_exe()
-            .context("실행 파일 위치를 확인할 수 없습니다")?
+            .context("Could not resolve the executable path")?
             .parent()
-            .context("실행 파일 폴더를 확인할 수 없습니다")?
+            .context("Could not resolve the executable directory")?
             .to_path_buf()
     };
-    let root = fs::canonicalize(&root)
-        .with_context(|| format!("번역기 묶음 경로가 존재하지 않습니다: {}", root.display()))?;
+    let root = fs::canonicalize(&root).with_context(|| {
+        format!(
+            "The translator bundle path does not exist: {}",
+            root.display()
+        )
+    })?;
     if !root.is_dir() {
-        bail!("번역기 묶음 경로가 폴더가 아닙니다: {}", root.display());
+        bail!(
+            "The translator bundle path is not a directory: {}",
+            root.display()
+        );
     }
     Ok(root)
 }
@@ -383,12 +395,12 @@ fn resolve_bundle_path(root: &Path, raw: &str) -> Result<PathBuf> {
             .components()
             .any(|component| !matches!(component, Component::Normal(_)))
     {
-        bail!("번역기 묶음 안의 상대 경로만 허용됩니다");
+        bail!("Only relative paths inside the translator bundle are allowed");
     }
 
-    let candidate = fs::canonicalize(root.join(relative)).context("파일이 존재하지 않습니다")?;
+    let candidate = fs::canonicalize(root.join(relative)).context("The file does not exist")?;
     if !candidate.starts_with(root) || !candidate.is_file() {
-        bail!("번역기 묶음 밖의 파일은 사용할 수 없습니다");
+        bail!("Files outside the translator bundle cannot be used");
     }
     Ok(candidate)
 }
@@ -396,10 +408,10 @@ fn resolve_bundle_path(root: &Path, raw: &str) -> Result<PathBuf> {
 fn trusted_artifacts() -> Result<TrustedArtifacts> {
     let manifest: TrustedArtifacts =
         serde_json::from_str(include_str!("../packaging/trusted-artifacts.json"))
-            .context("내장된 신뢰 파일 목록이 올바르지 않습니다")?;
+            .context("The embedded trusted artifact manifest is invalid")?;
     if manifest.schema_version != 1 {
         bail!(
-            "지원하지 않는 신뢰 파일 목록 버전입니다: {}",
+            "Unsupported trusted artifact manifest version: {}",
             manifest.schema_version
         );
     }
@@ -414,7 +426,7 @@ fn verify_trusted_artifacts(
     let manifest = trusted_artifacts()?;
     if manifest.runtime.id != engine.runtime_id {
         bail!(
-            "로컬 엔진 종류가 신뢰 목록과 다릅니다 (설정: {}, 신뢰 목록: {})",
+            "The local engine type differs from the trust manifest (config: {}, manifest: {})",
             engine.runtime_id,
             manifest.runtime.id
         );
@@ -424,24 +436,33 @@ fn verify_trusted_artifacts(
         .models
         .iter()
         .find(|model| model.id == engine.model_id)
-        .with_context(|| format!("신뢰 목록에 없는 모델입니다: {}", engine.model_id))?;
+        .with_context(|| {
+            format!(
+                "The model is not in the trust manifest: {}",
+                engine.model_id
+            )
+        })?;
     let actual_model_name = model_path
         .file_name()
-        .context("모델 파일 이름을 확인할 수 없습니다")?
+        .context("Could not read the model file name")?
         .to_string_lossy();
     if !actual_model_name.eq_ignore_ascii_case(&model.file) {
         bail!(
-            "모델 파일 이름이 신뢰 목록과 다릅니다 (예상: {}, 실제: {})",
+            "The model file name differs from the trust manifest (expected: {}, actual: {})",
             model.file,
             actual_model_name
         );
     }
-    verify_file(model_path, model.bytes, &model.sha256)
-        .with_context(|| format!("모델 무결성 검증 실패: {}", model_path.display()))?;
+    verify_file(model_path, model.bytes, &model.sha256).with_context(|| {
+        format!(
+            "Model integrity verification failed: {}",
+            model_path.display()
+        )
+    })?;
 
     let runtime_dir = executable
         .parent()
-        .context("로컬 엔진 폴더를 확인할 수 없습니다")?;
+        .context("Could not resolve the local engine directory")?;
     let expected_names = manifest
         .runtime
         .files
@@ -450,15 +471,15 @@ fn verify_trusted_artifacts(
         .collect::<BTreeSet<_>>();
     let executable_name = executable
         .file_name()
-        .context("로컬 엔진 파일 이름을 확인할 수 없습니다")?
+        .context("Could not read the local engine file name")?
         .to_string_lossy()
         .to_ascii_lowercase();
     if !expected_names.contains(&executable_name) {
-        bail!("신뢰 목록에 없는 로컬 엔진 실행 파일입니다: {executable_name}");
+        bail!("The local engine executable is not in the trust manifest: {executable_name}");
     }
 
     let actual_names = fs::read_dir(runtime_dir)
-        .context("로컬 엔진 폴더를 읽을 수 없습니다")?
+        .context("Could not read the local engine directory")?
         .filter_map(|entry| entry.ok())
         .filter_map(|entry| {
             let path = entry.path();
@@ -484,7 +505,7 @@ fn verify_trusted_artifacts(
             .collect::<Vec<_>>()
             .join(", ");
         bail!(
-            "로컬 엔진 파일 구성이 신뢰 목록과 다릅니다 (누락: [{}], 추가: [{}])",
+            "The local engine inventory differs from the trust manifest (missing: [{}], extra: [{}])",
             missing,
             extra
         );
@@ -492,9 +513,9 @@ fn verify_trusted_artifacts(
 
     for artifact in &manifest.runtime.files {
         let path = resolve_bundle_path(runtime_dir, &artifact.path)
-            .with_context(|| format!("신뢰 런타임 파일을 찾을 수 없습니다: {}", artifact.path))?;
+            .with_context(|| format!("A trusted runtime file is missing: {}", artifact.path))?;
         verify_file(&path, artifact.bytes, &artifact.sha256)
-            .with_context(|| format!("런타임 무결성 검증 실패: {}", artifact.path))?;
+            .with_context(|| format!("Runtime integrity verification failed: {}", artifact.path))?;
     }
     Ok(())
 }
@@ -502,19 +523,19 @@ fn verify_trusted_artifacts(
 fn verify_file(path: &Path, expected_bytes: u64, expected_sha256: &str) -> Result<()> {
     if expected_sha256.len() != 64 || !expected_sha256.bytes().all(|byte| byte.is_ascii_hexdigit())
     {
-        bail!("신뢰 목록의 SHA-256 값이 올바르지 않습니다");
+        bail!("The SHA-256 value in the trust manifest is invalid");
     }
-    let metadata = fs::metadata(path).context("파일 정보를 읽을 수 없습니다")?;
+    let metadata = fs::metadata(path).context("Could not read file metadata")?;
     if metadata.len() != expected_bytes {
         bail!(
-            "파일 크기가 다릅니다 (예상: {expected_bytes}, 실제: {})",
+            "File size differs (expected: {expected_bytes}, actual: {})",
             metadata.len()
         );
     }
 
     let actual_sha256 = sha256_file(path)?;
     if !actual_sha256.eq_ignore_ascii_case(expected_sha256) {
-        bail!("SHA-256이 다릅니다 (예상: {expected_sha256}, 실제: {actual_sha256})");
+        bail!("SHA-256 differs (expected: {expected_sha256}, actual: {actual_sha256})");
     }
     Ok(())
 }
@@ -549,7 +570,7 @@ fn sha256_file(path: &Path) -> Result<String> {
 
     fn check_status(status: i32, operation: &str) -> Result<()> {
         if status < 0 {
-            bail!("Windows SHA-256 {operation} 실패: NTSTATUS 0x{status:08x}");
+            bail!("Windows SHA-256 {operation} failed: NTSTATUS 0x{status:08x}");
         }
         Ok(())
     }
@@ -559,7 +580,7 @@ fn sha256_file(path: &Path) -> Result<String> {
         unsafe {
             BCryptOpenAlgorithmProvider(&raw mut algorithm, BCRYPT_SHA256_ALGORITHM, ptr::null(), 0)
         },
-        "초기화",
+        "initialization",
     )?;
     let algorithm = Algorithm(algorithm);
 
@@ -576,37 +597,35 @@ fn sha256_file(path: &Path) -> Result<String> {
                 0,
             )
         },
-        "해시 생성",
+        "hash creation",
     )?;
     let hash = Hash(hash);
 
-    let file = File::open(path).context("파일을 열 수 없습니다")?;
+    let file = File::open(path).context("Could not open file")?;
     let mut reader = BufReader::with_capacity(1024 * 1024, file);
     let mut buffer = vec![0_u8; 1024 * 1024];
     loop {
-        let read = reader
-            .read(&mut buffer)
-            .context("파일을 읽을 수 없습니다")?;
+        let read = reader.read(&mut buffer).context("Could not read file")?;
         if read == 0 {
             break;
         }
         check_status(
             unsafe { BCryptHashData(hash.0, buffer.as_ptr(), read as u32, 0) },
-            "파일 처리",
+            "file processing",
         )?;
     }
 
     let mut output = [0_u8; 32];
     check_status(
         unsafe { BCryptFinishHash(hash.0, output.as_mut_ptr(), output.len() as u32, 0) },
-        "완료",
+        "completion",
     )?;
     Ok(output.iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
 #[cfg(not(windows))]
 fn sha256_file(_path: &Path) -> Result<String> {
-    bail!("신뢰 파일 SHA-256 검증은 Windows 패키지에서 지원됩니다")
+    bail!("Trusted artifact SHA-256 verification is supported by the Windows package")
 }
 
 #[cfg(test)]

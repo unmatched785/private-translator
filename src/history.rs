@@ -74,9 +74,11 @@ pub struct HistoryStore {
 impl HistoryStore {
     pub fn open(path: &Path, crypto: VaultCrypto) -> Result<Self> {
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).context("기록 DB 폴더를 만들 수 없습니다")?;
+            std::fs::create_dir_all(parent)
+                .context("Could not create the vault database directory")?;
         }
-        let mut connection = Connection::open(path).context("로컬 기록 DB를 열 수 없습니다")?;
+        let mut connection =
+            Connection::open(path).context("Could not open the local vault database")?;
         connection
             .execute_batch(
                 "
@@ -85,7 +87,7 @@ impl HistoryStore {
                 PRAGMA foreign_keys = ON;
                 ",
             )
-            .context("기록 DB 안전 설정을 적용할 수 없습니다")?;
+            .context("Could not apply vault database safety settings")?;
         migrate(&mut connection)?;
 
         Ok(Self {
@@ -110,7 +112,7 @@ impl HistoryStore {
             qa_warnings: new_record.qa_warnings,
         };
         let serialized =
-            serde_json::to_vec(&payload).context("번역 기록을 직렬화할 수 없습니다")?;
+            serde_json::to_vec(&payload).context("Could not serialize the translation record")?;
         let aad = aad(&id, created_at);
         let (nonce, ciphertext) = self.crypto.encrypt(&serialized, &aad)?;
 
@@ -121,7 +123,7 @@ impl HistoryStore {
                  VALUES (?1, ?2, 0, ?3, ?4)",
                 params![id, created_at, nonce, ciphertext],
             )
-            .context("번역 기록을 저장할 수 없습니다")?;
+            .context("Could not save the translation record")?;
 
         Ok(HistoryRecord {
             id,
@@ -208,7 +210,7 @@ impl HistoryStore {
                 },
             )
             .optional()
-            .context("번역 기록을 읽을 수 없습니다")?;
+            .context("Could not read the translation record")?;
         drop(connection);
         row.map(|row| self.decrypt_row(row)).transpose()
     }
@@ -220,7 +222,7 @@ impl HistoryStore {
                 "UPDATE history SET favorite = ?2 WHERE id = ?1",
                 params![id, if favorite { 1_i64 } else { 0_i64 }],
             )
-            .context("즐겨찾기를 변경할 수 없습니다")?;
+            .context("Could not change the favorite state")?;
         Ok(changed > 0)
     }
 
@@ -228,7 +230,7 @@ impl HistoryStore {
         let connection = self.connection.lock().expect("history mutex poisoned");
         let changed = connection
             .execute("DELETE FROM history WHERE id = ?1", [id])
-            .context("번역 기록을 삭제할 수 없습니다")?;
+            .context("Could not delete the translation record")?;
         Ok(changed > 0)
     }
 
@@ -236,7 +238,7 @@ impl HistoryStore {
         let connection = self.connection.lock().expect("history mutex poisoned");
         let count: i64 = connection
             .query_row("SELECT COUNT(*) FROM history", [], |row| row.get(0))
-            .context("번역 기록 수를 읽을 수 없습니다")?;
+            .context("Could not count translation records")?;
         Ok(count.max(0) as u64)
     }
 
@@ -280,7 +282,7 @@ impl HistoryStore {
         };
         let mut statement = connection
             .prepare(sql)
-            .context("기록 조회를 준비할 수 없습니다")?;
+            .context("Could not prepare the history query")?;
         let mapped = statement
             .query_map([limit as i64], |row| {
                 Ok(EncryptedRow {
@@ -293,17 +295,17 @@ impl HistoryStore {
                     approved_revision: row.get::<_, Option<i64>>(6)?.map(|value| value as u32),
                 })
             })
-            .context("기록을 조회할 수 없습니다")?;
+            .context("Could not query translation history")?;
         mapped
             .collect::<rusqlite::Result<Vec<_>>>()
-            .context("기록 행을 읽을 수 없습니다")
+            .context("Could not read a history row")
     }
 
     fn decrypt_row(&self, row: EncryptedRow) -> Result<HistoryRecord> {
         let aad = aad(&row.id, row.created_at);
         let plain = self.crypto.decrypt(&row.nonce, &row.ciphertext, &aad)?;
         let payload: EncryptedPayload =
-            serde_json::from_slice(&plain).context("암호화된 기록 내용이 손상되었습니다")?;
+            serde_json::from_slice(&plain).context("The encrypted history payload is corrupted")?;
         Ok(HistoryRecord {
             id: row.id,
             created_at: row.created_at,
@@ -327,17 +329,17 @@ impl HistoryStore {
 fn migrate(connection: &mut Connection) -> Result<()> {
     let current_version: i64 = connection
         .query_row("PRAGMA user_version", [], |row| row.get(0))
-        .context("기록 DB 버전을 읽을 수 없습니다")?;
+        .context("Could not read the vault database version")?;
     if current_version > SCHEMA_VERSION {
         bail!(
-            "이 프로그램보다 새로운 기록 DB입니다 (DB: {current_version}, 지원: {SCHEMA_VERSION})"
+            "The vault database is newer than this application (database: {current_version}, supported: {SCHEMA_VERSION})"
         );
     }
 
     if current_version < 1 {
         let transaction = connection
             .transaction()
-            .context("기록 DB 마이그레이션을 시작할 수 없습니다")?;
+            .context("Could not begin the vault database migration")?;
         transaction
             .execute_batch(
                 "
@@ -353,16 +355,16 @@ fn migrate(connection: &mut Connection) -> Result<()> {
                 PRAGMA user_version = 1;
                 ",
             )
-            .context("기록 DB v1 마이그레이션에 실패했습니다")?;
+            .context("Vault database v1 migration failed")?;
         transaction
             .commit()
-            .context("기록 DB v1 마이그레이션을 완료할 수 없습니다")?;
+            .context("Could not commit the vault database v1 migration")?;
     }
 
     if current_version < 2 {
         let transaction = connection
             .transaction()
-            .context("번역 자산 DB 마이그레이션을 시작할 수 없습니다")?;
+            .context("Could not begin the translation asset database migration")?;
         transaction
             .execute_batch(
                 "
@@ -388,10 +390,10 @@ fn migrate(connection: &mut Connection) -> Result<()> {
                 PRAGMA user_version = 2;
                 ",
             )
-            .context("번역 자산 DB v2 마이그레이션에 실패했습니다")?;
+            .context("Translation asset database v2 migration failed")?;
         transaction
             .commit()
-            .context("번역 자산 DB v2 마이그레이션을 완료할 수 없습니다")?;
+            .context("Could not commit the translation asset database v2 migration")?;
     }
     Ok(())
 }

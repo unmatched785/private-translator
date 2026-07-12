@@ -61,8 +61,10 @@ pub enum TranslateError {
 impl fmt::Display for TranslateError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::UnknownModel => formatter.write_str("선택한 모델을 찾을 수 없습니다"),
-            Self::Superseded => formatter.write_str("더 최신 번역 요청으로 교체되었습니다"),
+            Self::UnknownModel => formatter.write_str("The selected model was not found"),
+            Self::Superseded => {
+                formatter.write_str("A newer translation request replaced this one")
+            }
             Self::Failed(error) => error.fmt(formatter),
         }
     }
@@ -122,7 +124,7 @@ impl EngineManager {
             .clone()
             .acquire_owned()
             .await
-            .map_err(|_| TranslateError::Failed(anyhow!("번역 대기열이 종료되었습니다")));
+            .map_err(|_| TranslateError::Failed(anyhow!("The translation queue stopped")));
         drop(queued);
         let _permit = permit?;
 

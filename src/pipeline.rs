@@ -30,7 +30,7 @@ pub struct SupersededRequest;
 
 impl fmt::Display for SupersededRequest {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("더 최신 번역 요청으로 교체되었습니다")
+        formatter.write_str("A newer translation request replaced this one")
     }
 }
 
@@ -84,7 +84,7 @@ pub async fn run(
     }
 
     if chunk_count == 0 {
-        bail!("번역할 텍스트 구간을 만들 수 없습니다");
+        bail!("Could not create a text chunk for translation");
     }
     ensure_current(is_current)?;
     let latency_ms = started.elapsed().as_millis() as u64;
@@ -112,18 +112,18 @@ fn prompt_budget(model: &ModelConfig) -> Result<usize> {
         .context_tokens
         .checked_sub(model.max_output_tokens + CONTEXT_SAFETY_TOKENS)
         .filter(|budget| *budget >= 64)
-        .context("모델 컨텍스트에서 안전한 번역 입력 예산을 만들 수 없습니다")
+        .context("Could not create a safe translation budget for the model context")
 }
 
 fn push_split(pending: &mut VecDeque<TextChunk>, chunk: TextChunk, completed: usize) -> Result<()> {
     if completed + pending.len() + 2 > MAX_TRANSLATION_CHUNKS {
         bail!(
-            "긴 문서를 {}개 이하의 구간으로 나눌 수 없습니다",
+            "Could not split the long document into at most {} chunks",
             MAX_TRANSLATION_CHUNKS
         );
     }
     let (left, right) = split_chunk(chunk)
-        .context("한 모델 컨텍스트에 넣을 수 없는 텍스트를 더 나눌 수 없습니다")?;
+        .context("Text that exceeds one model context could not be split further")?;
     pending.push_front(right);
     pending.push_front(left);
     Ok(())

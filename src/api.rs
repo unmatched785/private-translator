@@ -30,6 +30,7 @@ pub struct AppState {
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/", get(index))
+        .route("/i18n.js", get(i18n_js))
         .route("/app.js", get(app_js))
         .route("/styles.css", get(styles_css))
         .route("/api/config", get(get_config))
@@ -67,7 +68,11 @@ async fn local_security(request: Request<Body>, next: Next) -> Response {
     let mut response = if allowed_host {
         next.run(request).await
     } else {
-        ApiError::not_found("로컬 주소에서만 사용할 수 있습니다").into_response()
+        ApiError::not_found(
+            "local_only",
+            "This app can only be used from its local address.",
+        )
+        .into_response()
     };
     apply_security_headers(&mut response);
     response
@@ -81,6 +86,13 @@ async fn app_js() -> impl IntoResponse {
     secure_asset(
         "application/javascript; charset=utf-8",
         include_str!("../web/app.js"),
+    )
+}
+
+async fn i18n_js() -> impl IntoResponse {
+    secure_asset(
+        "application/javascript; charset=utf-8",
+        include_str!("../web/i18n.js"),
     )
 }
 
@@ -109,35 +121,58 @@ async fn translate(
 ) -> Result<Json<TranslateResponse>, ApiError> {
     let text = request.text.trim();
     if text.is_empty() {
-        return Err(ApiError::bad_request("번역할 텍스트를 입력하세요"));
+        return Err(ApiError::bad_request(
+            "empty_text",
+            "Enter text to translate.",
+        ));
     }
     if request.text.chars().count() > state.config.max_text_chars {
-        return Err(ApiError::bad_request(format!(
-            "한 번에 번역할 수 있는 최대 길이는 {}자입니다",
-            state.config.max_text_chars
-        )));
+        return Err(ApiError::bad_request(
+            "text_too_long",
+            format!(
+                "Text cannot exceed {} characters.",
+                state.config.max_text_chars
+            ),
+        ));
     }
     if request.target == "auto" {
-        return Err(ApiError::bad_request("대상 언어를 선택하세요"));
+        return Err(ApiError::bad_request(
+            "target_required",
+            "Select a target language.",
+        ));
     }
     validate_request_identity(&request)?;
 
-    let model = state
-        .config
-        .model(&request.model)
-        .ok_or_else(|| ApiError::bad_request("선택한 모델이 현재 프로필에 없습니다"))?;
+    let model = state.config.model(&request.model).ok_or_else(|| {
+        ApiError::bad_request(
+            "model_not_found",
+            "The selected model is not available in this profile.",
+        )
+    })?;
+    let supported_languages = engine::supported_language_codes(model.family);
+    let source_supported =
+        request.source == "auto" || supported_languages.contains(&request.source.as_str());
+    let target_supported = supported_languages.contains(&request.target.as_str());
+    if !source_supported || !target_supported {
+        return Err(ApiError::bad_request(
+            "unsupported_language",
+            "The selected model does not support one of these languages.",
+        ));
+    }
     let engine_result = state
         .engines
         .translate(&request)
         .await
         .map_err(|error| match error {
-            TranslateError::UnknownModel => {
-                ApiError::bad_request("선택한 모델이 현재 프로필에 없습니다")
-            }
-            TranslateError::Superseded => {
-                ApiError::conflict("더 최신 번역 요청으로 교체되었습니다")
-            }
-            TranslateError::Failed(error) => ApiError::unavailable(error.to_string()),
+            TranslateError::UnknownModel => ApiError::bad_request(
+                "model_not_found",
+                "The selected model is not available in this profile.",
+            ),
+            TranslateError::Superseded => ApiError::conflict(
+                "request_superseded",
+                "A newer translation request replaced this one.",
+            ),
+            TranslateError::Failed(error) => ApiError::unavailable(error),
         })?;
 
     let mut history_id = None;
@@ -188,7 +223,8 @@ fn validate_request_identity(request: &TranslateRequest) -> Result<(), ApiError>
             Ok(())
         }
         _ => Err(ApiError::bad_request(
-            "번역 요청 식별자가 올바르지 않습니다",
+            "invalid_request_id",
+            "The translation request identifier is invalid.",
         )),
     }
 }
@@ -220,7 +256,9 @@ async fn get_history(
         .await
         .map_err(ApiError::internal)?
         .map(Json)
-        .ok_or_else(|| ApiError::not_found("번역 기록을 찾을 수 없습니다"))
+        .ok_or_else(|| {
+            ApiError::not_found("history_not_found", "The translation record was not found.")
+        })
 }
 
 async fn set_favorite(
@@ -236,7 +274,10 @@ async fn set_favorite(
     {
         Ok(StatusCode::NO_CONTENT)
     } else {
-        Err(ApiError::not_found("번역 기록을 찾을 수 없습니다"))
+        Err(ApiError::not_found(
+            "history_not_found",
+            "The translation record was not found.",
+        ))
     }
 }
 
@@ -252,7 +293,10 @@ async fn delete_history(
     {
         Ok(StatusCode::NO_CONTENT)
     } else {
-        Err(ApiError::not_found("번역 기록을 찾을 수 없습니다"))
+        Err(ApiError::not_found(
+            "history_not_found",
+            "The translation record was not found.",
+        ))
     }
 }
 
@@ -266,7 +310,9 @@ async fn approve_history(
         .await
         .map_err(ApiError::internal)?
         .map(Json)
-        .ok_or_else(|| ApiError::not_found("승인할 번역 기록을 찾을 수 없습니다"))
+        .ok_or_else(|| {
+            ApiError::not_found("history_not_found", "The translation record was not found.")
+        })
 }
 
 async fn list_memory(
@@ -291,7 +337,9 @@ async fn get_memory(
         .await
         .map_err(ApiError::internal)?
         .map(Json)
-        .ok_or_else(|| ApiError::not_found("번역 자산을 찾을 수 없습니다"))
+        .ok_or_else(|| {
+            ApiError::not_found("memory_not_found", "The translation asset was not found.")
+        })
 }
 
 async fn revise_memory(
@@ -300,18 +348,27 @@ async fn revise_memory(
     Json(request): Json<MemoryRevisionRequest>,
 ) -> Result<Json<TranslationMemoryRecord>, ApiError> {
     if request.source_text.trim().is_empty() || request.translated_text.trim().is_empty() {
-        return Err(ApiError::bad_request("원문과 번역문을 모두 입력하세요"));
+        return Err(ApiError::bad_request(
+            "empty_memory",
+            "Enter both source text and translated text.",
+        ));
     }
     if request.source_text.chars().count() > state.config.max_text_chars
         || request.translated_text.chars().count() > state.config.max_text_chars
     {
-        return Err(ApiError::bad_request(format!(
-            "번역 자산의 원문과 번역문은 각각 {}자 이하여야 합니다",
-            state.config.max_text_chars
-        )));
+        return Err(ApiError::bad_request(
+            "memory_text_too_long",
+            format!(
+                "Translation asset fields cannot exceed {} characters.",
+                state.config.max_text_chars
+            ),
+        ));
     }
     if request.target_lang == "auto" {
-        return Err(ApiError::bad_request("대상 언어를 선택하세요"));
+        return Err(ApiError::bad_request(
+            "target_required",
+            "Select a target language.",
+        ));
     }
     let qa_warnings = engine::qa_warnings(&request.source_text, &request.translated_text);
     state
@@ -329,7 +386,9 @@ async fn revise_memory(
         .await
         .map_err(ApiError::internal)?
         .map(Json)
-        .ok_or_else(|| ApiError::not_found("수정할 번역 자산을 찾을 수 없습니다"))
+        .ok_or_else(|| {
+            ApiError::not_found("memory_not_found", "The translation asset was not found.")
+        })
 }
 
 async fn list_memory_revisions(
@@ -343,7 +402,10 @@ async fn list_memory_revisions(
         .map_err(ApiError::internal)?
         .is_none()
     {
-        return Err(ApiError::not_found("번역 자산을 찾을 수 없습니다"));
+        return Err(ApiError::not_found(
+            "memory_not_found",
+            "The translation asset was not found.",
+        ));
     }
     let records = state
         .storage
@@ -365,12 +427,15 @@ async fn delete_memory(
     {
         Ok(StatusCode::NO_CONTENT)
     } else {
-        Err(ApiError::not_found("삭제할 번역 자산을 찾을 수 없습니다"))
+        Err(ApiError::not_found(
+            "memory_not_found",
+            "The translation asset was not found.",
+        ))
     }
 }
 
 async fn not_found() -> impl IntoResponse {
-    ApiError::not_found("요청한 경로를 찾을 수 없습니다")
+    ApiError::not_found("route_not_found", "The requested path was not found.")
 }
 
 fn secure_static<T: IntoResponse>(response: T) -> Response {
@@ -435,6 +500,7 @@ struct PublicModel {
     label: String,
     description: String,
     privacy: String,
+    supported_languages: Vec<&'static str>,
 }
 
 impl From<&ModelConfig> for PublicModel {
@@ -444,6 +510,7 @@ impl From<&ModelConfig> for PublicModel {
             label: model.label.clone(),
             description: model.description.clone(),
             privacy: engine::privacy_label(model.privacy).into(),
+            supported_languages: engine::supported_language_codes(model.family).to_vec(),
         }
     }
 }
@@ -514,40 +581,47 @@ struct ErrorBody {
 
 #[derive(Debug, Serialize)]
 struct ErrorMessage {
+    code: &'static str,
     message: String,
 }
 
 #[derive(Debug)]
 struct ApiError {
     status: StatusCode,
+    code: &'static str,
     message: String,
 }
 
 impl ApiError {
-    fn bad_request(message: impl Into<String>) -> Self {
+    fn bad_request(code: &'static str, message: impl Into<String>) -> Self {
         Self {
             status: StatusCode::BAD_REQUEST,
+            code,
             message: message.into(),
         }
     }
 
-    fn not_found(message: impl Into<String>) -> Self {
+    fn not_found(code: &'static str, message: impl Into<String>) -> Self {
         Self {
             status: StatusCode::NOT_FOUND,
+            code,
             message: message.into(),
         }
     }
 
-    fn unavailable(message: impl Into<String>) -> Self {
+    fn unavailable(error: impl std::fmt::Display) -> Self {
+        eprintln!("translation engine error: {error}");
         Self {
             status: StatusCode::SERVICE_UNAVAILABLE,
-            message: message.into(),
+            code: "engine_unavailable",
+            message: "The local translation engine could not complete the request.".into(),
         }
     }
 
-    fn conflict(message: impl Into<String>) -> Self {
+    fn conflict(code: &'static str, message: impl Into<String>) -> Self {
         Self {
             status: StatusCode::CONFLICT,
+            code,
             message: message.into(),
         }
     }
@@ -556,7 +630,8 @@ impl ApiError {
         eprintln!("internal error: {error}");
         Self {
             status: StatusCode::INTERNAL_SERVER_ERROR,
-            message: "로컬 기록을 처리하는 중 오류가 발생했습니다".into(),
+            code: "storage_error",
+            message: "The encrypted local vault could not complete the operation.".into(),
         }
     }
 }
@@ -567,6 +642,7 @@ impl IntoResponse for ApiError {
             self.status,
             Json(ErrorBody {
                 error: ErrorMessage {
+                    code: self.code,
                     message: self.message,
                 },
             }),

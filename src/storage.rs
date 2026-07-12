@@ -94,7 +94,7 @@ impl StorageWorker {
                     }
                 }
             })
-            .map_err(|error| anyhow!("로컬 저장 작업자를 시작할 수 없습니다: {error}"))?;
+            .map_err(|error| anyhow!("Could not start the local storage worker: {error}"))?;
         Ok(Self { sender })
     }
 
@@ -177,14 +177,14 @@ impl StorageWorker {
     fn send(&self, command: StorageCommand) -> Result<()> {
         self.sender
             .send(command)
-            .map_err(|_| anyhow!("로컬 저장 작업자가 종료되었습니다"))
+            .map_err(|_| anyhow!("The local storage worker stopped"))
     }
 }
 
 async fn receive<T>(response: oneshot::Receiver<Result<T>>) -> Result<T> {
     response
         .await
-        .map_err(|_| anyhow!("로컬 저장 작업자의 응답이 중단되었습니다"))?
+        .map_err(|_| anyhow!("The local storage worker response was interrupted"))?
 }
 
 #[cfg(test)]

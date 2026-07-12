@@ -4,77 +4,84 @@ Date: 2026-07-12
 
 ## Product decision
 
-사용자 화면은 브라우저이고, 번역 엔진과 기록고는 작은 로컬 실행 파일이 관리한다. 브라우저 안에서 대형 모델을 직접 실행하거나 Chromium 전체를 프로그램에 포함하지 않는다.
+The user interface runs in the user's default browser. A small local executable owns the translation engine and encrypted vault. The product does not run a large model directly inside the browser and does not bundle an entire Chromium runtime.
 
 ```mermaid
 flowchart LR
-    Browser["기본 브라우저 UI"] -->|"127.0.0.1 only"| App["Private Translator"]
-    App --> Storage["전용 저장 작업자"]
-    Storage --> Vault["암호화 기록 + 승인 자산 버전"]
-    App --> Manager["EngineManager + 모델별 대기열"]
-    Manager --> Lite["Hy-MT2 1.8B Q4\n노트북 CPU"]
-    Manager --> Quality["Hy-MT2 7B Q4\n개인 Mac mini 또는 고사양 PC"]
-    Manager --> Compare["TranslateGemma 12B\n비교 후보"]
+    Browser["Default browser UI"] -->|"127.0.0.1 only"| App["Private Translator"]
+    App --> Storage["Dedicated storage worker"]
+    Storage --> Vault["Encrypted history and asset revisions"]
+    App --> Manager["EngineManager and per-model queues"]
+    Manager --> Lite["Hy-MT2 1.8B Q4\nlaptop CPU"]
+    Manager --> Quality["Optional Hy-MT2 7B\nprivate workstation"]
 ```
 
 ## One codebase, two profiles
 
 ### Lite profile
 
-- 일반 사무용 노트북 우선
-- 한 개의 검증된 모델만 표시
-- CPU 스레드는 논리 코어 수에 맞춰 최대 8개로 제한
-- 모델 파일은 애플리케이션과 별도 업데이트
+- Prioritizes everyday office laptops.
+- Shows one verified model.
+- Automatically uses at most eight logical CPU threads.
+- Keeps the model file separate from application updates.
 
 ### Quality profile
 
-- 동일한 브라우저 UI와 로컬 기록고 사용
-- 빠른 모델, 품질 모델, 비교 모델을 선택 가능
-- 개인 네트워크의 Mac mini 모델도 연결 가능
-- 클라우드 모델은 기본 목록과 자동 폴백에 포함하지 않음
+- Uses the same browser interface and local encrypted vault.
+- Starts with the same bundled 1.8B model.
+- Adds an optional Hy-MT2 7B endpoint on a permitted private address.
+- Never includes a cloud model or automatic cloud fallback.
 
-두 프로필은 저장 스키마와 API가 같으므로 Lite에서 쌓은 기록을 Quality로 그대로 이어서 사용한다.
+Both profiles use the same storage schema and API, so a user can move between them without converting history.
+
+TranslateGemma is intentionally deferred. Its official model requires a dedicated structured chat template with source and target language-code fields. A generic OpenAI-compatible text prompt is not treated as a production adapter.
+
+## Model-driven language capabilities
+
+Each public model descriptor includes `supported_languages`. The interface rebuilds its source and target selectors from the active model's capability list. Hy-MT2 1.8B and 7B currently expose the 38 entries documented by the official model project. A future model adapter must provide its own tested list instead of inheriting Hy-MT2's list accidentally.
+
+Language display names use the browser's `Intl.DisplayNames` in the chosen interface locale, with stable English fallbacks. English interface strings are the default resource and Korean is the second included interface locale.
 
 ## Encrypted history vault
 
-기록과 캐시는 별개다. 캐시가 삭제되거나 모델이 바뀌어도 사용자 기록은 남아야 한다.
+History and cache are different assets. Deleting cache or changing a model must not delete user history.
 
-SQLite에는 다음 열만 평문으로 존재한다.
+Only the following structural values remain plaintext in SQLite:
 
-- 무작위 기록 ID
-- 정렬용 생성 시각
-- 즐겨찾기 여부
-- 12바이트 암호 nonce
-- 암호문
+- random record IDs;
+- timestamps used for sorting;
+- favorite and relationship state;
+- 12-byte nonces;
+- ciphertext.
 
-암호문 안에는 다음이 함께 들어간다.
+The encrypted payload contains:
 
-- 원문과 번역문
-- 원문 언어와 대상 언어
-- 모델 ID와 표시 이름
-- Lite/Quality 모드
-- 장치/개인 네트워크 경계
-- 처리 시간
-- 숫자 및 URL 보존 QA 경고
+- source and translated text;
+- source and target languages;
+- model ID and display label;
+- Lite or Quality mode;
+- device or private-network boundary;
+- processing time;
+- number and URL preservation warnings.
 
-레코드 ID와 생성 시각은 AES-GCM의 additional authenticated data로도 사용한다. 다른 행의 암호문을 복사하거나 시각을 바꾸면 복호화가 실패한다.
+Record IDs and timestamps are also authenticated as AES-GCM additional data. Moving ciphertext to another row or changing its authenticated timestamp causes decryption to fail.
 
 ### Key handling
 
-- Windows: 무작위 256비트 키를 만들고 DPAPI CurrentUser로 감싸 `vault.key`에 저장
-- macOS/Linux 서버: `TRANSLATOR_VAULT_PASSPHRASE`에서 Argon2id로 키 파생
-- 원문이나 번역문은 브라우저 저장소, URL, 로그에 기록하지 않음
+- Windows: create a random 256-bit key, protect it with DPAPI CurrentUser, and store the wrapped value in `vault.key`.
+- macOS/Linux development: derive a key from `TRANSLATOR_VAULT_PASSPHRASE` with Argon2id.
+- Never write source or translated text to browser storage, URLs, or application logs.
 
-현재 검색은 암호화 레코드를 메모리에서 복호화한 뒤 수행한다. 개인 기록 수천~수만 건을 우선 대상으로 하며, 벤치마크 후 SQLCipher/암호화 검색 색인으로 확장한다.
+Search currently decrypts records in the storage worker and filters them in memory. This is appropriate for a personal vault and avoids a plaintext search index. A larger-scale encrypted index requires separate measurement and design.
 
-### History vs approved translation memory
+### History versus approved translation memory
 
-- 기록은 번역할 때 자동으로 쌓이는 사건 로그다.
-- 번역 자산은 사용자가 좋은 결과라고 명시적으로 승인한 항목만 들어간다.
-- 자산 수정은 현재 행을 덮어쓰지 않고 암호화된 새 revision을 추가한다.
-- 기록의 삭제는 연결된 자산을 삭제하지 않으며, 자산 삭제는 별도 명시 동작이다.
-- SQLite 작업은 전용 저장 스레드가 직렬 처리해 비동기 HTTP 실행기를 막지 않는다.
-- `PRAGMA user_version` 기반 v1/v2 마이그레이션은 기존 기록을 보존한다.
+- History is an event log produced when saving is enabled.
+- An approved translation asset exists only after an explicit user action.
+- Editing an asset appends a new encrypted revision instead of overwriting the current row.
+- Deleting history does not delete the linked asset; deleting an asset is a separate explicit action.
+- A dedicated storage thread serializes SQLite work so async HTTP handlers are not blocked by database operations.
+- `PRAGMA user_version` migrations preserve existing records.
 
 ## Local API
 
@@ -94,42 +101,49 @@ DELETE /api/memory/:id
 GET    /api/memory/:id/revisions
 ```
 
-응답에는 `Cache-Control: no-store`, CSP, `Referrer-Policy: no-referrer`를 적용한다. 서버는 loopback Host 헤더만 허용하며 CORS를 열지 않는다.
+Responses use `Cache-Control: no-store`, a restrictive Content Security Policy, and `Referrer-Policy: no-referrer`. The server accepts loopback Host headers only and does not enable CORS. API failures include stable language-neutral codes plus an English fallback message; the browser localizes known codes.
 
 ## Translation behavior
 
-- 붙여넣기 후 자동 번역
-- 직접 입력은 `Ctrl+Enter` 또는 번역 버튼
-- 기록 저장은 기본 활성화
-- 기록 저장을 끄면 해당 요청은 번역만 하고 저장하지 않음
-- 숫자와 URL 불일치 시 결과 아래에 QA 경고 표시
-- 모델의 실제 입력 토큰 수를 기준으로 긴 문서를 의미 경계에서 분할
-- 출력 한도 도달 시 더 작은 구간으로 나누어 재시도하고 전체 결과에 QA 수행
-- 백엔드 인터페이스로 HTTP 호환 엔진과 테스트용 엔진을 분리
-- 모델별 동시 실행을 하나로 제한하고 나머지는 대기열에서 순서대로 처리
-- 같은 브라우저 탭의 새 요청이 오면 오래된 대기·실행 요청은 다음 안전 지점에서 중단
-- 모델 오류가 나도 원문을 로그에 포함하지 않음
+- Paste triggers translation automatically.
+- Typed input uses `Ctrl+Enter` or the Translate button.
+- History saving is enabled by default and can be disabled per request.
+- Number and URL differences appear as localized QA warnings.
+- Long documents are split near semantic boundaries using the model's real or conservative token budget.
+- A chunk that reaches the output limit is split again and retried; QA runs on the full reconstructed result.
+- HTTP-compatible and test engines share a backend interface.
+- Each model executes one request at a time while other work waits in its queue.
+- A newer request from the same browser tab supersedes older work at safe cancellation points.
+- Engine errors never include source text in logs or public API responses.
 
 ## Packaging boundary
 
-최종 설치 폴더는 다음 형태를 목표로 한다.
+The combined Windows archive has this shape:
 
 ```text
-PrivateTranslator-Lite.exe
-runtime/llama.cpp/llama-server.exe
-models/Hy-MT2-1.8B-Q4_K_M.gguf
-configs/lite.json
+PrivateTranslator-v0.1.0-Windows-x64/
+├── PrivateTranslator-Lite.exe
+├── PrivateTranslator-Quality.exe
+├── runtime/llama.cpp/llama-server.exe
+├── models/Hy-MT2-1.8B-Q4_K_M.gguf
+├── configs/lite.json
+├── configs/quality.json
+└── licenses/
 ```
 
-모델을 실행 파일에 넣지 않는다. 애플리케이션 업데이트와 모델 업데이트를 분리하고, 작은 설치판과 완전 오프라인 모델팩을 모두 제공할 수 있어야 한다.
+The model is not embedded in the executable. Application and model updates can therefore be reviewed and distributed separately, while the release archive still works fully offline after extraction.
 
-실행 파일은 내장된 신뢰 목록으로 모델과 모든 런타임 EXE/DLL의 크기 및 SHA-256을 확인한다. 패키지 실행 시에는 실행 파일 폴더, 개발 실행 시에는 명시한 `TRANSLATOR_BUNDLE_DIR`만 신뢰하며 절대 경로와 상위 폴더 이탈은 거부한다. 엔진의 `/health` 뒤 `/v1/models`에서 예상 모델 ID까지 일치해야 준비 완료로 본다. Windows에서는 kill-on-close Job Object에 자식 프로세스를 넣어 앱이 강제 종료되어도 모델 엔진이 남지 않게 한다. 이미 사용자가 실행한 엔진도 모델 ID가 일치할 때만 재사용하고 종료 시 건드리지 않는다.
+The executable verifies the size and SHA-256 of the model and every runtime EXE/DLL from an embedded trust manifest. Packaged execution trusts only paths below the executable directory; development execution trusts the explicit `TRANSLATOR_BUNDLE_DIR`. Absolute paths and parent-directory escapes are rejected.
+
+After `/health` succeeds, the app checks `/v1/models` for the expected model identity. On Windows, a kill-on-close Job Object owns the model process so force-closing the parent does not leave it running. A compatible engine that the user started separately is reused only when its model identity matches and is not terminated by the app.
 
 ## Deferred work
 
-- RAM 용량과 CPU 명령어 집합 감지 및 저사양 경고
-- 유휴 시 모델 언로드
-- 암호화된 휴대용 백업/복원
-- 개인 용어집과 승인 자산의 문맥 검색·자동 제안
-- 다중 사용자 Hub 인증과 사용자별 기록고
-- 설치 프로그램 서명 및 자동 업데이트
+- Code signing and a signed installer
+- RAM and CPU feature detection with low-memory warnings
+- Idle model unloading
+- Encrypted portable backup and restore
+- Local terminology suggestions based only on explicitly approved assets
+- A measured, separately packaged 7B quality model
+- A dedicated TranslateGemma adapter and evaluation before it becomes selectable
+- Automatic updates with signed metadata
