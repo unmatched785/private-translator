@@ -3,11 +3,11 @@ $ErrorActionPreference = "Stop"
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $binary = Join-Path $root "target\release\private-translator.exe"
 $runtime = Join-Path $root "runtime\llama.cpp"
-$model = Join-Path $root "models\Hy-MT2-1.8B-Q4_K_M.gguf"
 $dist = Join-Path $root "dist"
 $trustedManifestPath = Join-Path $root "packaging\trusted-artifacts.json"
+$modelInstaller = Join-Path $root "packaging\Install-Model.cmd"
 
-foreach ($required in @($binary, $runtime, $model, $trustedManifestPath)) {
+foreach ($required in @($binary, $runtime, $trustedManifestPath, $modelInstaller)) {
     if (-not (Test-Path -LiteralPath $required)) {
         throw "Required build component is missing: $required"
     }
@@ -43,7 +43,11 @@ $modelSpecification = $trustedManifest.models |
 if ($null -eq $modelSpecification) {
     throw "The Lite model is missing from the trusted artifact manifest."
 }
-Assert-TrustedFile -Path $model -Specification $modelSpecification
+if ($modelSpecification.channel -ne "stable" -or
+    $modelSpecification.revision -notmatch '^[0-9a-f]{40}$' -or
+    $modelSpecification.download_url -notmatch '^https://huggingface\.co/') {
+    throw "The Lite model must use a pinned stable official download."
+}
 
 $expectedRuntimeNames = @($trustedManifest.runtime.files |
     ForEach-Object { $_.path.ToLowerInvariant() } |
@@ -73,12 +77,13 @@ function New-PortableProfile {
 
     $destination = Join-Path $dist $Folder
     $runtimeDestination = Join-Path $destination "runtime\llama.cpp"
-    $modelDestinationDirectory = Join-Path $destination "models"
     $licenseDestination = Join-Path $destination "licenses"
     $configDestination = Join-Path $destination "configs"
 
+    if (Test-Path -LiteralPath $destination) {
+        Remove-Item -LiteralPath $destination -Recurse -Force
+    }
     New-Item -ItemType Directory -Force -Path $runtimeDestination | Out-Null
-    New-Item -ItemType Directory -Force -Path $modelDestinationDirectory | Out-Null
     New-Item -ItemType Directory -Force -Path $licenseDestination | Out-Null
     New-Item -ItemType Directory -Force -Path $configDestination | Out-Null
 
@@ -93,16 +98,11 @@ function New-PortableProfile {
     Copy-Item -LiteralPath (Join-Path $root "configs\$Config") -Destination $configDestination -Force
     Copy-Item -LiteralPath (Join-Path $root "runtime\licenses\llama.cpp-LICENSE") -Destination $licenseDestination -Force
     Copy-Item -LiteralPath (Join-Path $root "runtime\licenses\Hy-MT2-LICENSE") -Destination $licenseDestination -Force
+    Copy-Item -LiteralPath $modelInstaller -Destination $destination -Force
 
-    $modelDestination = Join-Path $modelDestinationDirectory "Hy-MT2-1.8B-Q4_K_M.gguf"
-    if (Test-Path -LiteralPath $modelDestination) {
-        $sourceHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $model).Hash
-        $destinationHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $modelDestination).Hash
-        if ($sourceHash -ne $destinationHash) {
-            throw "Existing packaged model has a different hash: $modelDestination"
-        }
-    } else {
-        New-Item -ItemType HardLink -Path $modelDestination -Target $model | Out-Null
+    $bundledModels = @(Get-ChildItem -LiteralPath $destination -Recurse -File -Filter "*.gguf")
+    if ($bundledModels.Count -ne 0) {
+        throw "Thin packages must not contain GGUF model files."
     }
 }
 
@@ -110,5 +110,7 @@ New-Item -ItemType Directory -Force -Path $dist | Out-Null
 New-PortableProfile -Folder "PrivateTranslator-Lite" -Executable "PrivateTranslator-Lite.exe" -Readme "README-Lite.txt" -KoreanReadme "README-Lite.ko.txt" -Config "lite.json"
 New-PortableProfile -Folder "PrivateTranslator-Quality" -Executable "PrivateTranslator-Quality.exe" -Readme "README-Quality.txt" -KoreanReadme "README-Quality.ko.txt" -Config "quality.json"
 
-Get-ChildItem -Path $dist -Filter "PrivateTranslator-*.exe" -Recurse |
-    Select-Object FullName, Length
+Get-Item -LiteralPath @(
+    (Join-Path $dist "PrivateTranslator-Lite\PrivateTranslator-Lite.exe"),
+    (Join-Path $dist "PrivateTranslator-Quality\PrivateTranslator-Quality.exe")
+) | Select-Object FullName, Length
