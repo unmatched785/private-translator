@@ -7,7 +7,7 @@
 
 Private Translator is a Windows-first, offline translation app that feels like a web translator without sending your text to a website. The interface opens in your normal browser, while a small local executable runs the model and stores encrypted history on your PC.
 
-> **v0.1 status:** usable and tested on Windows x64, but not code-signed yet. Windows may show an unknown-publisher warning.
+> **v0.1.1 status:** usable and tested on Windows x64, but not code-signed yet. Windows may show an unknown-publisher warning.
 
 ## What it does
 
@@ -24,25 +24,35 @@ Private Translator is a Windows-first, offline translation app that feels like a
 
 ## Download and run
 
-1. Download `PrivateTranslator-v0.1.0-Windows-x64.zip` from the [latest release](https://github.com/unmatched785/private-translator/releases/latest).
+1. Download `PrivateTranslator-v0.1.1-Windows-x64.zip` from the [latest release](https://github.com/unmatched785/private-translator/releases/latest).
 2. Extract the ZIP to a normal folder. Do not run the executable from inside the archive.
-3. Double-click `PrivateTranslator-Lite.exe`.
-4. Keep its console window open while using the browser interface. Closing it also stops the local model server.
+3. While online, double-click `Install-Model.cmd` once. It downloads about 1.13 GB from a pinned official Hy-MT2 revision, resumes interrupted downloads, and verifies the exact size and SHA-256.
+4. Double-click `PrivateTranslator-Lite.exe`.
+5. Keep its console window open while using the browser interface. Closing it also stops the local model server.
 
-The release archive contains both executables and one shared local model:
+The small release archive contains two executables and the pinned `llama.cpp` runtime, but no GGUF model. Both profiles use the one verified model installed at `%LOCALAPPDATA%\PrivateTranslator\models`:
 
-| Executable | Intended use | Included model |
+| Executable | Intended use | Default model |
 | --- | --- | --- |
-| `PrivateTranslator-Lite.exe` | Everyday laptops; the recommended default | Hy-MT2 1.8B Q4 |
-| `PrivateTranslator-Quality.exe` | The same default model plus an optional private 7B endpoint | Hy-MT2 1.8B Q4 |
+| `PrivateTranslator-Lite.exe` | Everyday laptops; the recommended default | Shared Hy-MT2 1.8B Q4 |
+| `PrivateTranslator-Quality.exe` | The same default model plus an optional private 7B endpoint | Shared Hy-MT2 1.8B Q4 |
 
-Quality never falls back to an internet API. Its optional 7B entry only works after you provide a compatible model server on a permitted private address. The first release does not bundle the much larger 7B model.
+Quality never falls back to an internet API. Its optional 7B entry only works after you provide a compatible model server on a permitted private address. v0.1.1 does not install the much larger 7B model.
 
-Recommended environment: Windows 10 or 11 x64, 8 GB system RAM, and a modern x64 CPU. Translation speed depends heavily on CPU and memory bandwidth. After the archive is downloaded, normal use requires no internet connection.
+Recommended environment: Windows 10 or 11 x64, 8 GB system RAM, and a modern x64 CPU. Translation speed depends heavily on CPU and memory bandwidth. After model setup, normal use requires no internet connection. The original [v0.1.0 full offline bundle](https://github.com/unmatched785/private-translator/releases/tag/v0.1.0) remains available for air-gapped transfer.
+
+Useful model commands:
+
+```powershell
+.\PrivateTranslator-Lite.exe model status
+.\PrivateTranslator-Lite.exe model verify
+.\PrivateTranslator-Lite.exe setup --portable
+.\PrivateTranslator-Lite.exe setup --from C:\path\to\Hy-MT2-1.8B-Q4_K_M.gguf
+```
 
 ## Supported languages
 
-The bundled Hy-MT2 model exposes these 38 entries:
+The default Hy-MT2 model exposes these 38 entries:
 
 Korean, English, Japanese, Simplified Chinese, Traditional Chinese, French, German, Spanish, Portuguese, Italian, Russian, Arabic, Turkish, Thai, Vietnamese, Indonesian, Malay, Filipino, Hindi, Polish, Czech, Dutch, Ukrainian, Hebrew, Persian, Bengali, Tamil, Telugu, Marathi, Gujarati, Urdu, Khmer, Burmese, Tibetan, Kazakh, Mongolian, Uyghur, and Cantonese.
 
@@ -55,6 +65,7 @@ Source text, translated text, language choices, model metadata, latency, and QA 
 ```text
 %LOCALAPPDATA%\PrivateTranslator\history.db
 %LOCALAPPDATA%\PrivateTranslator\vault.key
+%LOCALAPPDATA%\PrivateTranslator\models\Hy-MT2-1.8B-Q4_K_M.gguf
 ```
 
 The database keeps only structural metadata such as random IDs and timestamps outside the ciphertext. Turning off **Save history** skips storage for that request. Deleting the app folder does not silently delete the vault.
@@ -72,7 +83,7 @@ Prerequisites:
 - PowerShell 7 or Windows PowerShell 5.1
 - Node.js only for JavaScript syntax checks and the UI-only mock server
 
-Clone the repository, then download and verify the pinned model and runtime:
+Clone the repository, then download and verify the pinned development model and runtime:
 
 ```powershell
 .\scripts\bootstrap.ps1
@@ -86,13 +97,13 @@ $env:CARGO_HOME = Join-Path (Get-Location) '.cache\cargo'
 cargo build --locked --release
 ```
 
-Create portable folders:
+Create thin portable folders. The resulting packages intentionally exclude every `.gguf` file:
 
 ```powershell
 .\scripts\package.ps1
 ```
 
-Create the combined release ZIP and SHA-256 sidecar:
+Create the compressed thin release ZIP and SHA-256 sidecar. The release script enforces a 150 MB maximum and rejects bundled GGUF files:
 
 ```powershell
 .\scripts\release.ps1
@@ -119,9 +130,9 @@ Private Translator executable
 
 The application verifies SHA-256 hashes before launching the model server, verifies the model ID returned by that server, serializes work per model, and gives the newest request from each browser tab priority at safe cancellation points.
 
-## Verification performed for v0.1
+## Verification performed for v0.1.1
 
-- 22 Rust unit and integration-style tests
+- 28 Rust unit and integration-style tests, including an actual HTTP Range resume, Windows file flush, and final checksum verification
 - `cargo clippy --all-targets -- -D warnings`
 - JavaScript syntax checks for the app, localization resource, and mock server
 - Real English-to-Korean Hy-MT2 translation
@@ -130,6 +141,8 @@ The application verifies SHA-256 hashes before launching the model server, verif
 - History → approved asset → v2 edit → history deletion with asset preservation
 - Plaintext test content absent from the encrypted database file
 - Managed `llama-server` terminated when the parent app was force-closed
+- Thin release inspection proving that no GGUF model is bundled
+- Shared and portable model installation paths with pinned size and SHA-256 verification
 
 Machine-specific speed observations are not a performance guarantee.
 

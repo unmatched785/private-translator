@@ -31,10 +31,9 @@ foreach ($path in @($bundle, $archive, $sidecar)) {
 }
 
 $runtimeDestination = Join-Path $bundle "runtime\llama.cpp"
-$modelDestinationDirectory = Join-Path $bundle "models"
 $licenseDestination = Join-Path $bundle "licenses"
 $configDestination = Join-Path $bundle "configs"
-New-Item -ItemType Directory -Force -Path $runtimeDestination, $modelDestinationDirectory, $licenseDestination, $configDestination | Out-Null
+New-Item -ItemType Directory -Force -Path $runtimeDestination, $licenseDestination, $configDestination | Out-Null
 
 Copy-Item -LiteralPath (Join-Path $dist "PrivateTranslator-Lite\PrivateTranslator-Lite.exe") -Destination $bundle
 Copy-Item -LiteralPath (Join-Path $dist "PrivateTranslator-Quality\PrivateTranslator-Quality.exe") -Destination $bundle
@@ -48,12 +47,18 @@ Copy-Item -LiteralPath (Join-Path $root "packaging\component-manifest.json") -De
 Copy-Item -LiteralPath (Join-Path $root "packaging\trusted-artifacts.json") -Destination $bundle
 Copy-Item -LiteralPath (Join-Path $root "packaging\README-Release.txt") -Destination (Join-Path $bundle "README.txt")
 Copy-Item -LiteralPath (Join-Path $root "packaging\README-Release.ko.txt") -Destination (Join-Path $bundle "README.ko.txt")
+Copy-Item -LiteralPath (Join-Path $root "packaging\Install-Model.cmd") -Destination $bundle
 
-$modelSource = Join-Path $root "models\Hy-MT2-1.8B-Q4_K_M.gguf"
-$modelDestination = Join-Path $modelDestinationDirectory "Hy-MT2-1.8B-Q4_K_M.gguf"
-New-Item -ItemType HardLink -Path $modelDestination -Target $modelSource | Out-Null
+$bundledModels = @(Get-ChildItem -LiteralPath $bundle -Recurse -File -Filter "*.gguf")
+if ($bundledModels.Count -ne 0) {
+    throw "Thin release archives must not contain GGUF model files."
+}
 
-Compress-Archive -Path $bundle -DestinationPath $archive -CompressionLevel NoCompression
+Compress-Archive -Path $bundle -DestinationPath $archive -CompressionLevel Optimal
+$archiveLength = (Get-Item -LiteralPath $archive).Length
+if ($archiveLength -gt 150MB) {
+    throw "Thin release archive exceeds the 150 MB size gate: $archiveLength bytes"
+}
 $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $archive).Hash.ToLowerInvariant()
 "$hash  $([System.IO.Path]::GetFileName($archive))" | Set-Content -LiteralPath $sidecar -Encoding ascii
 

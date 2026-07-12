@@ -17,6 +17,8 @@ These are non-negotiable product rules for Private Translator.
 13. Never promote ordinary history into an approved translation asset automatically.
 14. Preserve previous revisions when an approved asset is edited, and keep history deletion separate from asset deletion.
 15. Derive the selectable translation-language list from the active model's declared capability instead of pretending that every model supports every language.
+16. Permit internet access for model installation only after an explicit user command, and download only the pinned official artifact described by the embedded trust manifest.
+17. Never send translation text, history, approved assets, vault keys, or device telemetry with a model download request.
 
 ## Threat boundary
 

@@ -23,7 +23,7 @@ $modelDirectory = Join-Path $root "models"
 $modelPath = Join-Path $modelDirectory $componentManifest.lite_model.file
 $runtimeArchive = Join-Path $cacheDirectory $componentManifest.runtime.asset
 $runtimeDownloadUrl = "https://github.com/ggml-org/llama.cpp/releases/download/$($componentManifest.runtime.tag)/$($componentManifest.runtime.asset)"
-$modelDownloadUrl = "https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF/resolve/main/$($componentManifest.lite_model.file)?download=true"
+$modelDownloadUrl = $componentManifest.lite_model.download_url
 
 function Get-RemoteFile {
     param(

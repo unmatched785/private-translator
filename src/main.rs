@@ -5,23 +5,32 @@ mod crypto;
 mod engine;
 mod engine_manager;
 mod history;
+mod model_manager;
+mod paths;
 mod pipeline;
 mod runtime;
 mod storage;
 mod translation_memory;
 
-use std::{env, path::PathBuf, process::Command, sync::Arc, time::Duration};
+use std::{env, process::Command, sync::Arc, time::Duration};
 
 use anyhow::{Context, Result};
 use api::AppState;
 use config::LaunchOptions;
 use crypto::VaultCrypto;
 use engine_manager::EngineManager;
+use paths::data_dir;
 use reqwest::Client;
 use storage::StorageWorker;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let arguments = env::args().skip(1).collect::<Vec<_>>();
+    if model_manager::is_model_command(&arguments) {
+        model_manager::run(&arguments).await?;
+        return Ok(());
+    }
+
     let options = LaunchOptions::from_env_and_args()?;
     let data_dir = data_dir()?;
     let crypto = VaultCrypto::load_or_create(&data_dir)?;
@@ -60,28 +69,6 @@ async fn main() -> Result<()> {
         .await
         .context("The local translation server stopped unexpectedly")?;
     Ok(())
-}
-
-fn data_dir() -> Result<PathBuf> {
-    if let Some(path) = env::var_os("TRANSLATOR_DATA_DIR") {
-        return Ok(PathBuf::from(path));
-    }
-
-    #[cfg(windows)]
-    {
-        let local_app_data = env::var_os("LOCALAPPDATA")
-            .context("The LOCALAPPDATA environment variable is not available")?;
-        Ok(PathBuf::from(local_app_data).join("PrivateTranslator"))
-    }
-
-    #[cfg(not(windows))]
-    {
-        if let Some(xdg) = env::var_os("XDG_DATA_HOME") {
-            return Ok(PathBuf::from(xdg).join("private-translator"));
-        }
-        let home = env::var_os("HOME").context("The HOME environment variable is not available")?;
-        Ok(PathBuf::from(home).join(".local/share/private-translator"))
-    }
 }
 
 fn open_browser(url: &str) {

@@ -28,7 +28,7 @@ flowchart LR
 ### Quality profile
 
 - Uses the same browser interface and local encrypted vault.
-- Starts with the same bundled 1.8B model.
+- Starts with the same separately installed and verified 1.8B model.
 - Adds an optional Hy-MT2 7B endpoint on a permitted private address.
 - Never includes a cloud model or automatic cloud fallback.
 
@@ -118,22 +118,24 @@ Responses use `Cache-Control: no-store`, a restrictive Content Security Policy, 
 
 ## Packaging boundary
 
-The combined Windows archive has this shape:
+The v0.1.1 combined Windows archive is deliberately thin:
 
 ```text
-PrivateTranslator-v0.1.0-Windows-x64/
+PrivateTranslator-v0.1.1-Windows-x64/
 ├── PrivateTranslator-Lite.exe
 ├── PrivateTranslator-Quality.exe
+├── Install-Model.cmd
 ├── runtime/llama.cpp/llama-server.exe
-├── models/Hy-MT2-1.8B-Q4_K_M.gguf
 ├── configs/lite.json
 ├── configs/quality.json
 └── licenses/
 ```
 
-The model is not embedded in the executable. Application and model updates can therefore be reviewed and distributed separately, while the release archive still works fully offline after extraction.
+The model is neither embedded in the executable nor included in the v0.1.1 ZIP. An explicit one-time `setup` command downloads an exact official Hugging Face revision into `%LOCALAPPDATA%\PrivateTranslator\models`. Interrupted transfers remain in a `.partial` file and resume with an HTTP Range request. The file becomes active only after its trusted byte length and SHA-256 match. A user may instead install an already downloaded file with `setup --from`, or request a bundle-local copy with `setup --portable`.
 
-The executable verifies the size and SHA-256 of the model and every runtime EXE/DLL from an embedded trust manifest. Packaged execution trusts only paths below the executable directory; development execution trusts the explicit `TRANSLATOR_BUNDLE_DIR`. Absolute paths and parent-directory escapes are rejected.
+This keeps application releases small and lets future app versions reuse the same verified model without touching encrypted history. The v0.1.0 full bundle remains an archival option for air-gapped transfer. Once the v0.1.1 model setup is complete, ordinary translation remains fully offline.
+
+The executable embeds the stable channel, exact upstream revision, official download URL, byte length, and SHA-256 for the model. It also verifies every runtime EXE/DLL from the embedded trust manifest. Runtime paths and optional portable-model paths must remain below the executable directory; the normal shared model must remain below the resolved current-user model directory. Absolute bundle paths and parent-directory escapes are rejected.
 
 After `/health` succeeds, the app checks `/v1/models` for the expected model identity. On Windows, a kill-on-close Job Object owns the model process so force-closing the parent does not leave it running. A compatible engine that the user started separately is reused only when its model identity matches and is not terminated by the app.
 
@@ -146,4 +148,4 @@ After `/health` succeeds, the app checks `/v1/models` for the expected model ide
 - Local terminology suggestions based only on explicitly approved assets
 - A measured, separately packaged 7B quality model
 - A dedicated TranslateGemma adapter and evaluation before it becomes selectable
-- Automatic updates with signed metadata
+- Automatic application or model updates with signed metadata (manual pinned model setup is implemented)

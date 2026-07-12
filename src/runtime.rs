@@ -13,7 +13,10 @@ use reqwest::{Client, Url};
 use serde::Deserialize;
 use tokio::time::sleep;
 
-use crate::config::{AppConfig, LocalEngineConfig};
+use crate::{
+    config::{AppConfig, LocalEngineConfig},
+    paths,
+};
 
 pub struct LocalEngine {
     child: Option<Child>,
@@ -41,12 +44,17 @@ struct TrustedFile {
     sha256: String,
 }
 
-#[derive(Debug, Deserialize)]
-struct TrustedModel {
-    id: String,
-    file: String,
-    bytes: u64,
-    sha256: String,
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct TrustedModel {
+    pub(crate) id: String,
+    pub(crate) channel: String,
+    pub(crate) file: String,
+    pub(crate) bytes: u64,
+    pub(crate) sha256: String,
+    pub(crate) source: String,
+    pub(crate) revision: String,
+    pub(crate) download_url: String,
+    pub(crate) license: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -83,7 +91,7 @@ impl LocalEngine {
         let bundle_root = bundle_root().context("Could not locate a trusted translator bundle")?;
         let executable = resolve_bundle_path(&bundle_root, &engine.executable)
             .with_context(|| format!("Could not find the local engine: {}", engine.executable))?;
-        let model_path = resolve_bundle_path(&bundle_root, &engine.model_path)
+        let model_path = resolve_model_path(&bundle_root, engine)
             .with_context(|| format!("Could not find the local model: {}", engine.model_path))?;
 
         let executable_for_verification = executable.clone();
@@ -362,7 +370,7 @@ fn engine_threads(config: &LocalEngineConfig) -> usize {
         .clamp(1, 8)
 }
 
-fn bundle_root() -> Result<PathBuf> {
+pub(crate) fn bundle_root() -> Result<PathBuf> {
     let root = if let Some(explicit_root) = env::var_os("TRANSLATOR_BUNDLE_DIR") {
         PathBuf::from(explicit_root)
     } else {
@@ -387,7 +395,48 @@ fn bundle_root() -> Result<PathBuf> {
     Ok(root)
 }
 
-fn resolve_bundle_path(root: &Path, raw: &str) -> Result<PathBuf> {
+fn resolve_model_path(root: &Path, engine: &LocalEngineConfig) -> Result<PathBuf> {
+    let relative = validated_relative_path(&engine.model_path)?;
+    let portable_candidate = root.join(&relative);
+    if portable_candidate.is_file() {
+        return resolve_bundle_path(root, &engine.model_path);
+    }
+
+    let model = trusted_model(&engine.model_id)?;
+    let model_root = paths::model_dir()?;
+    let user_candidate = model_root.join(&model.file);
+    if user_candidate.is_file() {
+        let canonical_root = fs::canonicalize(&model_root).with_context(|| {
+            format!(
+                "Could not resolve the model directory: {}",
+                model_root.display()
+            )
+        })?;
+        let canonical_model = fs::canonicalize(&user_candidate).with_context(|| {
+            format!(
+                "Could not resolve the installed model: {}",
+                user_candidate.display()
+            )
+        })?;
+        if canonical_model.starts_with(&canonical_root) && canonical_model.is_file() {
+            return Ok(canonical_model);
+        }
+        bail!("The installed model path escapes the configured model directory");
+    }
+
+    let executable = env::current_exe()
+        .ok()
+        .and_then(|path| {
+            path.file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+        })
+        .unwrap_or_else(|| "PrivateTranslator-Lite.exe".into());
+    bail!(
+        "The verified Hy-MT2 model is not installed. Run:\n  \"{executable}\" setup\n\nThe one-time model download is about 1.13 GB."
+    )
+}
+
+fn validated_relative_path(raw: &str) -> Result<PathBuf> {
     let relative = Path::new(raw);
     if relative.as_os_str().is_empty()
         || relative.is_absolute()
@@ -397,6 +446,11 @@ fn resolve_bundle_path(root: &Path, raw: &str) -> Result<PathBuf> {
     {
         bail!("Only relative paths inside the translator bundle are allowed");
     }
+    Ok(relative.to_path_buf())
+}
+
+fn resolve_bundle_path(root: &Path, raw: &str) -> Result<PathBuf> {
+    let relative = validated_relative_path(raw)?;
 
     let candidate = fs::canonicalize(root.join(relative)).context("The file does not exist")?;
     if !candidate.starts_with(root) || !candidate.is_file() {
@@ -416,6 +470,14 @@ fn trusted_artifacts() -> Result<TrustedArtifacts> {
         );
     }
     Ok(manifest)
+}
+
+pub(crate) fn trusted_model(id: &str) -> Result<TrustedModel> {
+    trusted_artifacts()?
+        .models
+        .into_iter()
+        .find(|model| model.id == id)
+        .with_context(|| format!("The model is not in the trust manifest: {id}"))
 }
 
 fn verify_trusted_artifacts(
@@ -520,7 +582,7 @@ fn verify_trusted_artifacts(
     Ok(())
 }
 
-fn verify_file(path: &Path, expected_bytes: u64, expected_sha256: &str) -> Result<()> {
+pub(crate) fn verify_file(path: &Path, expected_bytes: u64, expected_sha256: &str) -> Result<()> {
     if expected_sha256.len() != 64 || !expected_sha256.bytes().all(|byte| byte.is_ascii_hexdigit())
     {
         bail!("The SHA-256 value in the trust manifest is invalid");
@@ -661,12 +723,15 @@ mod tests {
                 .iter()
                 .any(|file| file.path == "llama-server.exe")
         );
-        assert!(
-            manifest
-                .models
-                .iter()
-                .any(|model| model.id == "hy-mt2-1.8b-q4")
-        );
+        let model = manifest
+            .models
+            .iter()
+            .find(|model| model.id == "hy-mt2-1.8b-q4")
+            .unwrap();
+        assert_eq!(model.channel, "stable");
+        assert_eq!(model.revision, "1cd5208700acedef4ef93019b6cfc148b8522d45");
+        assert!(model.download_url.contains(&model.revision));
+        assert_eq!(model.license, "Apache-2.0");
     }
 
     #[test]

@@ -91,7 +91,7 @@ impl LaunchOptions {
                 "--no-open" => open_override = Some(false),
                 "--help" | "-h" => {
                     println!(
-                        "Private Translator\n\n  --profile lite|quality|demo\n  --config <file>\n  --open | --no-open"
+                        "Private Translator\n\n  setup [--portable] [--force] [--from <gguf>]\n  model install|status|verify|path\n\n  --profile lite|quality|demo\n  --config <file>\n  --open | --no-open"
                     );
                     std::process::exit(0);
                 }
