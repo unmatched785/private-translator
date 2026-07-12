@@ -9,7 +9,7 @@ license = "MIT"
 aes-gcm = "0.10"
 anyhow = "1"
 axum = "0.8"
-getrandom = "0.3"
+getrandom = "0.4"
 regex = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 rusqlite = { version = "0.37", features = ["bundled"] }
