@@ -19,6 +19,7 @@ pub struct AppConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LocalEngineConfig {
     pub model_id: String,
+    pub runtime_id: String,
     pub executable: String,
     pub model_path: String,
     #[serde(default = "default_context_size")]
@@ -42,6 +43,10 @@ pub struct ModelConfig {
     pub top_k: i32,
     #[serde(default = "default_repeat_penalty")]
     pub repeat_penalty: f32,
+    #[serde(default = "default_context_tokens")]
+    pub context_tokens: usize,
+    #[serde(default = "default_max_output_tokens")]
+    pub max_output_tokens: usize,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -160,6 +165,19 @@ impl AppConfig {
                     model.id
                 );
             }
+            if model.context_tokens < 512 || model.context_tokens > 131_072 {
+                bail!(
+                    "모델 context_tokens가 안전 범위를 벗어났습니다: {}",
+                    model.id
+                );
+            }
+            if model.max_output_tokens < 64 || model.max_output_tokens + 128 >= model.context_tokens
+            {
+                bail!(
+                    "모델 max_output_tokens가 context_tokens에 비해 올바르지 않습니다: {}",
+                    model.id
+                );
+            }
         }
         if let Some(engine) = &self.local_engine {
             let model = self.model(&engine.model_id).with_context(|| {
@@ -171,8 +189,14 @@ impl AppConfig {
             if engine.executable.trim().is_empty() || engine.model_path.trim().is_empty() {
                 bail!("local_engine 실행 파일과 모델 경로가 필요합니다");
             }
+            if engine.runtime_id.trim().is_empty() {
+                bail!("local_engine runtime_id가 필요합니다");
+            }
             if engine.context_size < 512 || engine.context_size > 131_072 {
                 bail!("local_engine context_size가 안전 범위를 벗어났습니다");
+            }
+            if engine.context_size != model.context_tokens {
+                bail!("local_engine context_size와 모델 context_tokens가 일치해야 합니다");
             }
             if engine.threads > 256 {
                 bail!("local_engine threads가 안전 범위를 벗어났습니다");
@@ -196,6 +220,14 @@ fn default_top_k() -> i32 {
 
 fn default_repeat_penalty() -> f32 {
     1.0
+}
+
+fn default_context_tokens() -> usize {
+    4096
+}
+
+fn default_max_output_tokens() -> usize {
+    2048
 }
 
 fn validate_model_endpoint(model: &ModelConfig) -> Result<()> {

@@ -215,7 +215,8 @@ async function translateCurrent(trigger) {
     });
 
     showTranslation(result.translated_text);
-    refs.translationMeta.textContent = `${result.model_label} · ${formatLatency(result.latency_ms)}`;
+    const chunkMeta = result.chunk_count > 1 ? ` · ${result.chunk_count}개 구간` : "";
+    refs.translationMeta.textContent = `${result.model_label} · ${formatLatency(result.latency_ms)}${chunkMeta}`;
     refs.historyState.textContent = result.history_id ? "암호화 기록 저장됨" : "이번 번역은 기록하지 않음";
     state.activeRecordId = result.history_id;
     refs.deleteActive.hidden = !result.history_id;

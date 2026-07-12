@@ -6,21 +6,23 @@
 
 - Hy-MT2 1.8B Q4 모델과 `llama.cpp` CPU 엔진 자동 시작/종료
 - 붙여넣기 자동 번역과 `Ctrl+Enter` 번역
+- 토큰 예산에 맞춘 긴 문서 자동 분할과 잘림 재시도
 - Lite/Quality 실행 파일 이름에 따른 프로필 자동 선택
 - 로컬 암호화 기록 검색, 즐겨찾기, 다시 열기, 삭제
 - 요청별 기록 저장 끄기
 - 숫자와 URL 보존 점검
+- 모델·런타임 SHA-256 및 실행 중인 모델 ID 확인
 - 외부 주소 차단과 loopback 전용 웹 서버
 
 ## 바로 실행
 
-개발 빌드를 직접 실행하려면 다음 파일을 더블클릭합니다.
+개발 빌드를 실행하려면 다음 스크립트를 사용합니다.
 
 ```text
-target\release\private-translator.exe
+scripts\run-lite.ps1
 ```
 
-`runtime/llama.cpp/llama-server.exe`와 `models/Hy-MT2-1.8B-Q4_K_M.gguf`가 있으면 모델 엔진을 자동으로 준비한 뒤 기본 브라우저를 엽니다. 사용을 마치면 프로그램 창을 닫습니다. 강제 종료되더라도 이 앱이 시작한 모델 엔진은 함께 종료됩니다.
+완성된 휴대용 폴더에서는 `PrivateTranslator-Lite.exe`를 더블클릭합니다. 앱은 실행 파일과 같은 묶음 안의 `runtime/llama.cpp/llama-server.exe`와 `models/Hy-MT2-1.8B-Q4_K_M.gguf`만 사용합니다. 시작 전에 파일 크기와 SHA-256을 확인하고, 엔진이 준비된 뒤 실제 모델 ID도 확인합니다. 사용을 마치면 프로그램 창을 닫습니다. 강제 종료되더라도 이 앱이 시작한 모델 엔진은 함께 종료됩니다.
 
 두 개의 완전한 휴대용 폴더를 만들려면 다음을 실행합니다.
 
@@ -83,10 +85,11 @@ Windows에서는 무작위 256비트 기록 키를 현재 Windows 사용자 계�
 
 ```powershell
 $env:CARGO_HOME = Join-Path (Get-Location) '.cache\cargo'
+$env:TRANSLATOR_BUNDLE_DIR = (Get-Location).Path
 cargo fmt --all -- --check
-cargo test --all-targets
-cargo clippy --all-targets -- -D warnings
-cargo build --release
+cargo test --offline --all-targets
+cargo clippy --offline --all-targets -- -D warnings
+cargo build --offline --release
 node --check .\web\app.js
 ```
 
@@ -94,12 +97,16 @@ node --check .\web\app.js
 
 ```powershell
 $env:TRANSLATOR_DATA_DIR = Join-Path (Get-Location) '.data\demo'
+$env:TRANSLATOR_BUNDLE_DIR = (Get-Location).Path
 cargo run -- --profile demo --no-open
 ```
 
 ## 현재 확인된 동작
 
 - 실제 Hy-MT2 영→한 번역 성공
+- 5,938자 사무 문서를 2개 구간으로 자동 분할해 누락 없이 번역
+- 1.13GB 모델과 51개 llama.cpp EXE/DLL의 시작 전 SHA-256 검증 성공
+- 실행 엔진의 `/v1/models` ID 확인 후에만 요청 수락
 - 이 개발 PC에서 짧은 사무 문장 약 1.5초, 생성 약 24 tokens/s 관측
 - 저장 번역은 암호화 기록에서 다시 열림
 - 기록 저장을 끈 요청은 기록 수가 늘지 않음
@@ -114,7 +121,6 @@ cargo run -- --profile demo --no-open
 - Quality 7B/12B 모델팩 실측 비교
 - 암호화 백업/복원
 - 개인 용어집과 승인 번역 메모리
-- 긴 문서 분할 및 문맥 연결
 - 모델 상태 표시와 사용 중 모델 교체
 
 구성 요소 버전과 SHA-256은 `packaging/component-manifest.json`에 고정되어 있습니다. 라이선스 고지는 `THIRD_PARTY_NOTICES.md`를 참고하세요.

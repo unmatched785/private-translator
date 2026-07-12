@@ -3,6 +3,7 @@ mod config;
 mod crypto;
 mod engine;
 mod history;
+mod pipeline;
 mod runtime;
 
 use std::{env, path::PathBuf, process::Command, sync::Arc, time::Duration};

@@ -1,9 +1,9 @@
-use std::{collections::BTreeSet, sync::OnceLock, time::Instant};
+use std::{collections::BTreeSet, sync::OnceLock};
 
 use anyhow::{Context, Result, bail};
 use regex::Regex;
 use reqwest::Client;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::json;
 
 use crate::config::{ModelConfig, ModelFamily, PrivacyBoundary};
@@ -21,11 +21,10 @@ pub struct TranslateRequest {
     pub save_history: bool,
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub struct EngineResult {
+#[derive(Debug, Clone)]
+pub struct ChunkTranslation {
     pub translated_text: String,
-    pub latency_ms: u64,
-    pub qa_warnings: Vec<String>,
+    pub truncated: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -36,6 +35,8 @@ struct ChatResponse {
 #[derive(Debug, Deserialize)]
 struct ChatChoice {
     message: ChatMessage,
+    #[serde(default)]
+    finish_reason: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -43,26 +44,45 @@ struct ChatMessage {
     content: String,
 }
 
-pub async fn run(
+#[derive(Debug, Deserialize)]
+struct TokenCountResponse {
+    input_tokens: usize,
+}
+
+pub async fn count_prompt_tokens(
     client: &Client,
     model: &ModelConfig,
     request: &TranslateRequest,
-) -> Result<EngineResult> {
-    let started = Instant::now();
-    let translated_text = match model.family {
-        ModelFamily::Mock => mock_translate(&request.text, &request.target),
-        ModelFamily::HyMt2 | ModelFamily::Translategemma => {
-            call_openai_compatible(client, model, request).await?
-        }
-    };
-    let latency_ms = started.elapsed().as_millis() as u64;
-    let qa_warnings = qa_warnings(&request.text, &translated_text);
+) -> usize {
+    let prompt = build_prompt(request, model.family);
+    if model.family == ModelFamily::Mock {
+        return conservative_token_upper_bound(&prompt);
+    }
 
-    Ok(EngineResult {
-        translated_text,
-        latency_ms,
-        qa_warnings,
-    })
+    count_openai_chat_tokens(client, model, &prompt)
+        .await
+        .unwrap_or_else(|_| conservative_token_upper_bound(&prompt))
+}
+
+pub async fn translate_once(
+    client: &Client,
+    model: &ModelConfig,
+    request: &TranslateRequest,
+    max_tokens: usize,
+) -> Result<ChunkTranslation> {
+    if max_tokens < 64 {
+        bail!("번역 결과를 위한 모델 컨텍스트가 부족합니다");
+    }
+
+    match model.family {
+        ModelFamily::Mock => Ok(ChunkTranslation {
+            translated_text: mock_translate(&request.text, &request.target),
+            truncated: false,
+        }),
+        ModelFamily::HyMt2 | ModelFamily::Translategemma => {
+            call_openai_compatible(client, model, request, max_tokens).await
+        }
+    }
 }
 
 pub fn privacy_label(boundary: PrivacyBoundary) -> &'static str {
@@ -76,7 +96,8 @@ async fn call_openai_compatible(
     client: &Client,
     model: &ModelConfig,
     request: &TranslateRequest,
-) -> Result<String> {
+    max_tokens: usize,
+) -> Result<ChunkTranslation> {
     let endpoint = format!("{}/chat/completions", model.endpoint.trim_end_matches('/'));
     let prompt = build_prompt(request, model.family);
     let body = json!({
@@ -86,7 +107,7 @@ async fn call_openai_compatible(
         "top_p": model.top_p,
         "top_k": model.top_k,
         "repeat_penalty": model.repeat_penalty,
-        "max_tokens": 4096,
+        "max_tokens": max_tokens,
         "stream": false
     });
 
@@ -109,14 +130,54 @@ async fn call_openai_compatible(
         .json()
         .await
         .context("번역 엔진 응답 형식이 올바르지 않습니다")?;
-    let text = response
+    let choice = response
         .choices
         .into_iter()
         .next()
-        .map(|choice| choice.message.content.trim().to_owned())
-        .filter(|text| !text.is_empty())
-        .context("번역 엔진이 빈 결과를 반환했습니다")?;
-    Ok(text)
+        .context("번역 엔진이 결과를 반환하지 않았습니다")?;
+    let text = choice.message.content.trim().to_owned();
+    if text.is_empty() {
+        bail!("번역 엔진이 빈 결과를 반환했습니다");
+    }
+    Ok(ChunkTranslation {
+        translated_text: text,
+        truncated: choice.finish_reason.as_deref() == Some("length"),
+    })
+}
+
+async fn count_openai_chat_tokens(
+    client: &Client,
+    model: &ModelConfig,
+    prompt: &str,
+) -> Result<usize> {
+    let endpoint = format!(
+        "{}/chat/completions/input_tokens",
+        model.endpoint.trim_end_matches('/')
+    );
+    let response = client
+        .post(&endpoint)
+        .json(&json!({
+            "model": model.api_model,
+            "messages": [{"role": "user", "content": prompt}]
+        }))
+        .send()
+        .await
+        .context("모델 토큰 수를 계산할 수 없습니다")?;
+    if !response.status().is_success() {
+        bail!("모델 토큰 계산 API를 사용할 수 없습니다");
+    }
+    let count: TokenCountResponse = response
+        .json()
+        .await
+        .context("모델 토큰 계산 응답이 올바르지 않습니다")?;
+    if count.input_tokens == 0 {
+        bail!("모델 토큰 계산 결과가 비어 있습니다");
+    }
+    Ok(count.input_tokens)
+}
+
+fn conservative_token_upper_bound(prompt: &str) -> usize {
+    prompt.len().saturating_add(128)
 }
 
 fn build_prompt(request: &TranslateRequest, family: ModelFamily) -> String {
@@ -152,7 +213,7 @@ fn mock_translate(text: &str, target: &str) -> String {
     }
 }
 
-fn qa_warnings(source: &str, translated: &str) -> Vec<String> {
+pub fn qa_warnings(source: &str, translated: &str) -> Vec<String> {
     let mut warnings = Vec::new();
     if translated.trim().is_empty() {
         warnings.push("번역 결과가 비어 있습니다".into());

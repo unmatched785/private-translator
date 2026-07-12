@@ -86,6 +86,7 @@ const server = http.createServer(async (request, response) => {
         model_label: config.models.find((model) => model.id === body.model)?.label || "로컬 데모",
         privacy: "device",
         latency_ms: 180,
+        chunk_count: 1,
         history_id: historyId,
         qa_warnings: [],
       });
@@ -171,4 +172,3 @@ function setSecurityHeaders(response) {
     "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
   );
 }
-

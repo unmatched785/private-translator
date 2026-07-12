@@ -16,6 +16,7 @@ use crate::{
     config::{AppConfig, ModelConfig},
     engine::{self, TranslateRequest},
     history::{HistoryFilter, HistoryRecord, HistoryStore, NewHistoryRecord},
+    pipeline,
 };
 
 #[derive(Clone)]
@@ -115,7 +116,7 @@ async fn translate(
         .config
         .model(&request.model)
         .ok_or_else(|| ApiError::bad_request("선택한 모델이 현재 프로필에 없습니다"))?;
-    let engine_result = engine::run(&state.client, model, &request)
+    let engine_result = pipeline::run(&state.client, model, &request)
         .await
         .map_err(|error| ApiError::unavailable(error.to_string()))?;
 
@@ -147,6 +148,7 @@ async fn translate(
         model_label: model.label.clone(),
         privacy: engine::privacy_label(model.privacy).into(),
         latency_ms: engine_result.latency_ms,
+        chunk_count: engine_result.chunk_count,
         history_id,
         qa_warnings: engine_result.qa_warnings,
     }))
@@ -302,6 +304,7 @@ struct TranslateResponse {
     model_label: String,
     privacy: String,
     latency_ms: u64,
+    chunk_count: usize,
     history_id: Option<String>,
     qa_warnings: Vec<String>,
 }

@@ -7,6 +7,7 @@
   "max_text_chars": 50000,
   "local_engine": {
     "model_id": "hy-mt2-1.8b-q4",
+    "runtime_id": "llama.cpp-b9966-win-cpu-x64",
     "executable": "runtime/llama.cpp/llama-server.exe",
     "model_path": "models/Hy-MT2-1.8B-Q4_K_M.gguf",
     "context_size": 4096,
@@ -24,7 +25,9 @@
       "temperature": 0.7,
       "top_p": 0.6,
       "top_k": 20,
-      "repeat_penalty": 1.05
+      "repeat_penalty": 1.05,
+      "context_tokens": 4096,
+      "max_output_tokens": 2048
     }
   ]
 }
