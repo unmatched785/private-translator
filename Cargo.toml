@@ -6,7 +6,7 @@ description = "Private, local-first translation gateway with an encrypted histor
 license = "MIT"
 
 [dependencies]
-aes-gcm = "0.10"
+aes-gcm = "0.11"
 anyhow = "1"
 axum = "0.8"
 getrandom = "0.3"
