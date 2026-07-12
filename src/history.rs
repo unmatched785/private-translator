@@ -1,11 +1,13 @@
 use std::{path::Path, sync::Mutex};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::crypto::VaultCrypto;
+
+const SCHEMA_VERSION: i64 = 2;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HistoryRecord {
@@ -22,6 +24,10 @@ pub struct HistoryRecord {
     pub privacy: String,
     pub latency_ms: u64,
     pub qa_warnings: Vec<String>,
+    #[serde(default)]
+    pub approved_memory_id: Option<String>,
+    #[serde(default)]
+    pub approved_revision: Option<u32>,
 }
 
 #[derive(Debug, Clone)]
@@ -42,6 +48,7 @@ pub struct NewHistoryRecord {
 pub struct HistoryFilter {
     pub query: Option<String>,
     pub favorites_only: bool,
+    pub approved_only: bool,
     pub limit: usize,
 }
 
@@ -60,8 +67,8 @@ struct EncryptedPayload {
 }
 
 pub struct HistoryStore {
-    connection: Mutex<Connection>,
-    crypto: VaultCrypto,
+    pub(crate) connection: Mutex<Connection>,
+    pub(crate) crypto: VaultCrypto,
 }
 
 impl HistoryStore {
@@ -69,25 +76,17 @@ impl HistoryStore {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).context("기록 DB 폴더를 만들 수 없습니다")?;
         }
-        let connection = Connection::open(path).context("로컬 기록 DB를 열 수 없습니다")?;
+        let mut connection = Connection::open(path).context("로컬 기록 DB를 열 수 없습니다")?;
         connection
             .execute_batch(
                 "
                 PRAGMA journal_mode = WAL;
                 PRAGMA synchronous = FULL;
                 PRAGMA foreign_keys = ON;
-                CREATE TABLE IF NOT EXISTS history (
-                    id TEXT PRIMARY KEY,
-                    created_at INTEGER NOT NULL,
-                    favorite INTEGER NOT NULL DEFAULT 0,
-                    nonce BLOB NOT NULL,
-                    ciphertext BLOB NOT NULL
-                );
-                CREATE INDEX IF NOT EXISTS idx_history_created_at
-                    ON history(created_at DESC);
                 ",
             )
-            .context("기록 DB를 초기화할 수 없습니다")?;
+            .context("기록 DB 안전 설정을 적용할 수 없습니다")?;
+        migrate(&mut connection)?;
 
         Ok(Self {
             connection: Mutex::new(connection),
@@ -138,6 +137,8 @@ impl HistoryStore {
             privacy: payload.privacy,
             latency_ms: payload.latency_ms,
             qa_warnings: payload.qa_warnings,
+            approved_memory_id: None,
+            approved_revision: None,
         })
     }
 
@@ -151,7 +152,7 @@ impl HistoryStore {
         } else {
             filter.limit.clamp(1, 500)
         };
-        let rows = self.read_rows(scan_limit, filter.favorites_only)?;
+        let rows = self.read_rows(scan_limit, filter.favorites_only, filter.approved_only)?;
         let query = filter
             .query
             .as_deref()
@@ -188,7 +189,11 @@ impl HistoryStore {
         let connection = self.connection.lock().expect("history mutex poisoned");
         let row = connection
             .query_row(
-                "SELECT id, created_at, favorite, nonce, ciphertext FROM history WHERE id = ?1",
+                "SELECT h.id, h.created_at, h.favorite, h.nonce, h.ciphertext,
+                        tm.id, tm.current_revision
+                 FROM history h
+                 LEFT JOIN translation_memory tm ON tm.history_id = h.id
+                 WHERE h.id = ?1",
                 [id],
                 |row| {
                     Ok(EncryptedRow {
@@ -197,6 +202,8 @@ impl HistoryStore {
                         favorite: row.get::<_, i64>(2)? != 0,
                         nonce: row.get(3)?,
                         ciphertext: row.get(4)?,
+                        approved_memory_id: row.get(5)?,
+                        approved_revision: row.get::<_, Option<i64>>(6)?.map(|value| value as u32),
                     })
                 },
             )
@@ -233,14 +240,43 @@ impl HistoryStore {
         Ok(count.max(0) as u64)
     }
 
-    fn read_rows(&self, limit: usize, favorites_only: bool) -> Result<Vec<EncryptedRow>> {
+    fn read_rows(
+        &self,
+        limit: usize,
+        favorites_only: bool,
+        approved_only: bool,
+    ) -> Result<Vec<EncryptedRow>> {
         let connection = self.connection.lock().expect("history mutex poisoned");
-        let sql = if favorites_only {
-            "SELECT id, created_at, favorite, nonce, ciphertext
-             FROM history WHERE favorite = 1 ORDER BY created_at DESC LIMIT ?1"
-        } else {
-            "SELECT id, created_at, favorite, nonce, ciphertext
-             FROM history ORDER BY created_at DESC LIMIT ?1"
+        let sql = match (favorites_only, approved_only) {
+            (true, true) => {
+                "SELECT h.id, h.created_at, h.favorite, h.nonce, h.ciphertext,
+                        tm.id, tm.current_revision
+                 FROM history h
+                 LEFT JOIN translation_memory tm ON tm.history_id = h.id
+                 WHERE h.favorite = 1 AND tm.id IS NOT NULL
+                 ORDER BY h.created_at DESC LIMIT ?1"
+            }
+            (true, false) => {
+                "SELECT h.id, h.created_at, h.favorite, h.nonce, h.ciphertext,
+                        tm.id, tm.current_revision
+                 FROM history h
+                 LEFT JOIN translation_memory tm ON tm.history_id = h.id
+                 WHERE h.favorite = 1 ORDER BY h.created_at DESC LIMIT ?1"
+            }
+            (false, true) => {
+                "SELECT h.id, h.created_at, h.favorite, h.nonce, h.ciphertext,
+                        tm.id, tm.current_revision
+                 FROM history h
+                 LEFT JOIN translation_memory tm ON tm.history_id = h.id
+                 WHERE tm.id IS NOT NULL ORDER BY h.created_at DESC LIMIT ?1"
+            }
+            (false, false) => {
+                "SELECT h.id, h.created_at, h.favorite, h.nonce, h.ciphertext,
+                        tm.id, tm.current_revision
+                 FROM history h
+                 LEFT JOIN translation_memory tm ON tm.history_id = h.id
+                 ORDER BY h.created_at DESC LIMIT ?1"
+            }
         };
         let mut statement = connection
             .prepare(sql)
@@ -253,6 +289,8 @@ impl HistoryStore {
                     favorite: row.get::<_, i64>(2)? != 0,
                     nonce: row.get(3)?,
                     ciphertext: row.get(4)?,
+                    approved_memory_id: row.get(5)?,
+                    approved_revision: row.get::<_, Option<i64>>(6)?.map(|value| value as u32),
                 })
             })
             .context("기록을 조회할 수 없습니다")?;
@@ -280,8 +318,82 @@ impl HistoryStore {
             privacy: payload.privacy,
             latency_ms: payload.latency_ms,
             qa_warnings: payload.qa_warnings,
+            approved_memory_id: row.approved_memory_id,
+            approved_revision: row.approved_revision,
         })
     }
+}
+
+fn migrate(connection: &mut Connection) -> Result<()> {
+    let current_version: i64 = connection
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .context("기록 DB 버전을 읽을 수 없습니다")?;
+    if current_version > SCHEMA_VERSION {
+        bail!(
+            "이 프로그램보다 새로운 기록 DB입니다 (DB: {current_version}, 지원: {SCHEMA_VERSION})"
+        );
+    }
+
+    if current_version < 1 {
+        let transaction = connection
+            .transaction()
+            .context("기록 DB 마이그레이션을 시작할 수 없습니다")?;
+        transaction
+            .execute_batch(
+                "
+                CREATE TABLE IF NOT EXISTS history (
+                    id TEXT PRIMARY KEY,
+                    created_at INTEGER NOT NULL,
+                    favorite INTEGER NOT NULL DEFAULT 0,
+                    nonce BLOB NOT NULL,
+                    ciphertext BLOB NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_history_created_at
+                    ON history(created_at DESC);
+                PRAGMA user_version = 1;
+                ",
+            )
+            .context("기록 DB v1 마이그레이션에 실패했습니다")?;
+        transaction
+            .commit()
+            .context("기록 DB v1 마이그레이션을 완료할 수 없습니다")?;
+    }
+
+    if current_version < 2 {
+        let transaction = connection
+            .transaction()
+            .context("번역 자산 DB 마이그레이션을 시작할 수 없습니다")?;
+        transaction
+            .execute_batch(
+                "
+                CREATE TABLE translation_memory (
+                    id TEXT PRIMARY KEY,
+                    history_id TEXT UNIQUE,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    current_revision INTEGER NOT NULL CHECK (current_revision > 0),
+                    FOREIGN KEY (history_id) REFERENCES history(id) ON DELETE SET NULL
+                );
+                CREATE INDEX idx_translation_memory_updated_at
+                    ON translation_memory(updated_at DESC);
+                CREATE TABLE translation_memory_revisions (
+                    memory_id TEXT NOT NULL,
+                    revision INTEGER NOT NULL CHECK (revision > 0),
+                    created_at INTEGER NOT NULL,
+                    nonce BLOB NOT NULL,
+                    ciphertext BLOB NOT NULL,
+                    PRIMARY KEY (memory_id, revision),
+                    FOREIGN KEY (memory_id) REFERENCES translation_memory(id) ON DELETE CASCADE
+                );
+                PRAGMA user_version = 2;
+                ",
+            )
+            .context("번역 자산 DB v2 마이그레이션에 실패했습니다")?;
+        transaction
+            .commit()
+            .context("번역 자산 DB v2 마이그레이션을 완료할 수 없습니다")?;
+    }
+    Ok(())
 }
 
 struct EncryptedRow {
@@ -290,13 +402,15 @@ struct EncryptedRow {
     favorite: bool,
     nonce: Vec<u8>,
     ciphertext: Vec<u8>,
+    approved_memory_id: Option<String>,
+    approved_revision: Option<u32>,
 }
 
 fn aad(id: &str, created_at: i64) -> Vec<u8> {
     format!("private-translator:v1:{id}:{created_at}").into_bytes()
 }
 
-fn now_unix_ms() -> i64 {
+pub(crate) fn now_unix_ms() -> i64 {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -341,6 +455,7 @@ mod tests {
             .list(HistoryFilter {
                 query: Some("계약서".into()),
                 favorites_only: false,
+                approved_only: false,
                 limit: 20,
             })
             .unwrap();
@@ -361,5 +476,38 @@ mod tests {
         let disk = String::from_utf8_lossy(&bytes);
         assert!(!disk.contains("Private contract"));
         assert!(!disk.contains("비공개 계약서"));
+    }
+
+    #[test]
+    fn legacy_database_is_migrated_without_dropping_rows() {
+        let temp = tempfile::tempdir().unwrap();
+        let database = temp.path().join("history.db");
+        let connection = Connection::open(&database).unwrap();
+        connection
+            .execute_batch(
+                "
+                CREATE TABLE history (
+                    id TEXT PRIMARY KEY,
+                    created_at INTEGER NOT NULL,
+                    favorite INTEGER NOT NULL DEFAULT 0,
+                    nonce BLOB NOT NULL,
+                    ciphertext BLOB NOT NULL
+                );
+                INSERT INTO history VALUES ('legacy', 1, 0, X'00', X'00');
+                ",
+            )
+            .unwrap();
+        drop(connection);
+
+        let crypto = VaultCrypto::from_key(&[5_u8; 32]).unwrap();
+        let store = HistoryStore::open(&database, crypto).unwrap();
+        assert_eq!(store.count().unwrap(), 1);
+        let version: i64 = store
+            .connection
+            .lock()
+            .unwrap()
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, SCHEMA_VERSION);
     }
 }

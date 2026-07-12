@@ -19,6 +19,10 @@ pub struct TranslateRequest {
     pub mode: String,
     #[serde(default = "default_true")]
     pub save_history: bool,
+    #[serde(default)]
+    pub client_id: Option<String>,
+    #[serde(default)]
+    pub request_seq: Option<u64>,
 }
 
 #[derive(Debug, Clone)]
@@ -202,7 +206,7 @@ fn build_prompt(request: &TranslateRequest, family: ModelFamily) -> String {
     }
 }
 
-fn mock_translate(text: &str, target: &str) -> String {
+pub(crate) fn mock_translate(text: &str, target: &str) -> String {
     let trimmed = text.trim();
     match (trimmed.to_lowercase().as_str(), target) {
         ("hello", "ko") | ("hello!", "ko") => "안녕하세요!".into(),

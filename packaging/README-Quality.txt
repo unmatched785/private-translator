@@ -17,7 +17,11 @@ Private Translator Quality 0.1.0
 - 외부 인터넷 API는 기본값에 없으며 자동 폴백도 하지 않습니다.
 - 개인 서버는 loopback, 사설 IP, .local 또는 Tailscale 대역만 허용합니다.
 - 모든 번역 기록은 이 Windows PC의 암호화 기록고에 저장됩니다.
+- 승인한 번역 자산과 수정 버전도 같은 기록고에 암호화해 저장됩니다.
 - 기록 기본 위치: %LOCALAPPDATA%\PrivateTranslator
+
+무결성
+- 시작할 때 기본 모델과 런타임 파일의 SHA-256 및 실제 모델 ID를 확인합니다.
 
 주의
 - 현재 개발 빌드는 코드 서명이 되어 있지 않습니다. 배포 전 정식 코드 서명이 필요합니다.

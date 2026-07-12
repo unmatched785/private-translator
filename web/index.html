@@ -45,6 +45,7 @@
         <div class="history-filters" role="group" aria-label="기록 필터">
           <button class="filter-chip active" type="button" data-filter="all">전체</button>
           <button class="filter-chip" type="button" data-filter="favorites">★ 즐겨찾기</button>
+          <button class="filter-chip" type="button" data-filter="approved">✓ 번역 자산</button>
         </div>
 
         <div id="historyList" class="history-list" aria-live="polite">
@@ -121,6 +122,9 @@
             <div class="card-header">
               <span>번역문</span>
               <div class="card-actions">
+                <button id="memoryAction" class="text-button" type="button" hidden>번역 자산으로 승인</button>
+                <button id="cancelMemoryEdit" class="text-button" type="button" hidden>수정 취소</button>
+                <button id="deleteMemory" class="text-button danger-button" type="button" hidden>자산 삭제</button>
                 <button id="deleteActive" class="text-button danger-button" type="button" hidden>기록 삭제</button>
                 <button id="copyOutput" class="text-button" type="button">복사</button>
               </div>

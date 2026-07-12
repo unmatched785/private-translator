@@ -60,6 +60,9 @@ const refs = {
   translateButton: document.querySelector("#translateButton"),
   clearSource: document.querySelector("#clearSource"),
   copyOutput: document.querySelector("#copyOutput"),
+  memoryAction: document.querySelector("#memoryAction"),
+  cancelMemoryEdit: document.querySelector("#cancelMemoryEdit"),
+  deleteMemory: document.querySelector("#deleteMemory"),
   deleteActive: document.querySelector("#deleteActive"),
   qaPanel: document.querySelector("#qaPanel"),
   historyList: document.querySelector("#historyList"),
@@ -75,9 +78,15 @@ const state = {
   config: null,
   records: [],
   activeRecordId: null,
-  favoritesOnly: false,
+  activeMemoryId: null,
+  activeMemoryRevision: null,
+  editingMemory: false,
+  memoryEditOriginal: "",
+  historyFilter: "all",
   translating: false,
   requestController: null,
+  clientId: createClientId(),
+  requestSequence: 0,
   searchTimer: null,
   toastTimer: null,
 };
@@ -148,6 +157,9 @@ function bindEvents() {
   refs.translateButton.addEventListener("click", () => translateCurrent("button"));
   refs.clearSource.addEventListener("click", clearWorkspace);
   refs.copyOutput.addEventListener("click", copyOutput);
+  refs.memoryAction.addEventListener("click", handleMemoryAction);
+  refs.cancelMemoryEdit.addEventListener("click", cancelMemoryEdit);
+  refs.deleteMemory.addEventListener("click", deleteActiveMemory);
   refs.deleteActive.addEventListener("click", deleteActiveRecord);
   refs.swapLanguages.addEventListener("click", swapLanguages);
   refs.modelSelect.addEventListener("change", () => {
@@ -168,7 +180,7 @@ function bindEvents() {
     button.addEventListener("click", () => {
       document.querySelectorAll(".filter-chip").forEach((chip) => chip.classList.remove("active"));
       button.classList.add("active");
-      state.favoritesOnly = button.dataset.filter === "favorites";
+      state.historyFilter = button.dataset.filter;
       loadHistory();
     });
   });
@@ -193,8 +205,13 @@ async function translateCurrent(trigger) {
     return;
   }
 
+  resetMemoryEditing();
+  state.activeMemoryId = null;
+  state.activeMemoryRevision = null;
+  updateMemoryControls();
   state.requestController?.abort();
   const controller = new AbortController();
+  const requestSequence = ++state.requestSequence;
   state.requestController = controller;
   state.translating = true;
   setLoadingState(true);
@@ -211,21 +228,25 @@ async function translateCurrent(trigger) {
         model: refs.modelSelect.value,
         mode: state.config.profile === "quality" ? "quality" : "instant",
         save_history: refs.saveHistory.checked,
+        client_id: state.clientId,
+        request_seq: requestSequence,
       }),
     });
 
+    if (requestSequence !== state.requestSequence) return;
     showTranslation(result.translated_text);
     const chunkMeta = result.chunk_count > 1 ? ` · ${result.chunk_count}개 구간` : "";
     refs.translationMeta.textContent = `${result.model_label} · ${formatLatency(result.latency_ms)}${chunkMeta}`;
     refs.historyState.textContent = result.history_id ? "암호화 기록 저장됨" : "이번 번역은 기록하지 않음";
     state.activeRecordId = result.history_id;
     refs.deleteActive.hidden = !result.history_id;
+    updateMemoryControls();
     renderQa(result.qa_warnings);
     if (result.history_id) {
       await loadHistory();
     }
   } catch (error) {
-    if (error.name !== "AbortError") {
+    if (error.name !== "AbortError" && requestSequence === state.requestSequence) {
       setEmptyOutput("번역 엔진에 연결하지 못했습니다", error.message);
       showToast(error.message, true);
     }
@@ -235,6 +256,12 @@ async function translateCurrent(trigger) {
       setLoadingState(false);
     }
   }
+}
+
+function createClientId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  const random = Math.random().toString(36).slice(2);
+  return `browser-${Date.now().toString(36)}-${random}`;
 }
 
 function setLoadingState(loading) {
@@ -252,6 +279,7 @@ function setLoadingState(loading) {
 
 function showTranslation(text) {
   refs.translatedText.value = text;
+  refs.translatedText.readOnly = true;
   refs.outputState.classList.add("hidden");
   refs.outputState.classList.remove("loading");
   refs.translatedText.classList.add("visible");
@@ -283,14 +311,27 @@ async function loadHistory() {
   const params = new URLSearchParams({ limit: "120" });
   const query = refs.historySearch.value.trim();
   if (query) params.set("q", query);
-  if (state.favoritesOnly) params.set("favorites", "true");
+  if (state.historyFilter === "favorites") params.set("favorites", "true");
 
   try {
-    const response = await api(`/api/history?${params}`);
+    if (state.historyFilter === "approved") {
+      const response = await api("/api/memory?limit=500");
+      const normalizedQuery = query.toLocaleLowerCase();
+      state.records = response.records
+        .map(memoryAsHistoryRecord)
+        .filter(
+          (record) =>
+            !normalizedQuery ||
+            `${record.source_text}\n${record.translated_text}`.toLocaleLowerCase().includes(normalizedQuery),
+        );
+    } else {
+      const response = await api(`/api/history?${params}`);
     state.records = response.records;
+    }
     renderHistory();
     if (state.config) {
-      refs.profileBadge.textContent = `${state.config.profile.toUpperCase()} · 기록 ${state.records.length}개`;
+      const countLabel = state.historyFilter === "approved" ? "자산" : "기록";
+      refs.profileBadge.textContent = `${state.config.profile.toUpperCase()} · ${countLabel} ${state.records.length}개`;
     }
   } catch (error) {
     refs.historyList.replaceChildren(emptyMessage("기록을 불러올 수 없습니다."));
@@ -303,8 +344,10 @@ function renderHistory() {
   if (!state.records.length) {
     const message = refs.historySearch.value.trim()
       ? "검색 결과가 없습니다.\n기록은 암호화된 상태로 로컬에 남아 있습니다."
-      : state.favoritesOnly
+      : state.historyFilter === "favorites"
         ? "즐겨찾기한 번역이 없습니다."
+        : state.historyFilter === "approved"
+          ? "아직 승인한 번역 자산이 없습니다.\n좋은 번역을 열어 자산으로 승인하세요."
         : "아직 저장된 번역이 없습니다.\n첫 번역을 붙여넣어 시작하세요.";
     refs.historyList.append(emptyMessage(message));
     return;
@@ -322,7 +365,10 @@ function renderHistory() {
     }
 
     const item = document.createElement("article");
-    item.className = `history-item${record.id === state.activeRecordId ? " active" : ""}`;
+    const isActive = record.is_memory_asset
+      ? record.approved_memory_id === state.activeMemoryId
+      : record.id === state.activeRecordId;
+    item.className = `history-item${isActive ? " active" : ""}`;
     item.dataset.id = record.id;
 
     const openButton = document.createElement("button");
@@ -345,6 +391,9 @@ function renderHistory() {
       document.createTextNode("·"),
       document.createTextNode(formatTime(record.created_at)),
     );
+    if (record.approved_revision) {
+      meta.append(document.createTextNode("·"), document.createTextNode(`번역 자산 v${record.approved_revision}`));
+    }
 
     const star = document.createElement("button");
     star.className = `history-star${record.favorite ? " on" : ""}`;
@@ -358,28 +407,56 @@ function renderHistory() {
 
     openButton.append(source, output, meta);
     openButton.addEventListener("click", () => openHistoryRecord(record));
-    item.append(openButton, star);
+    item.append(openButton);
+    if (!record.is_memory_asset) item.append(star);
     refs.historyList.append(item);
   }
 }
 
-function openHistoryRecord(record) {
-  state.activeRecordId = record.id;
-  refs.sourceText.value = record.source_text;
-  if ([...refs.sourceLanguage.options].some((option) => option.value === record.source_lang)) {
-    refs.sourceLanguage.value = record.source_lang;
+function memoryAsHistoryRecord(memory) {
+  return {
+    ...memory,
+    id: memory.history_id || `memory:${memory.id}`,
+    memory_id: memory.id,
+    approved_memory_id: memory.id,
+    approved_revision: memory.revision,
+    created_at: memory.updated_at,
+    favorite: false,
+    is_memory_asset: true,
+  };
+}
+
+async function openHistoryRecord(record) {
+  let openedRecord = record;
+  if (record.approved_memory_id && !record.is_memory_asset) {
+    try {
+      openedRecord = await api(`/api/memory/${encodeURIComponent(record.approved_memory_id)}`);
+    } catch (error) {
+      showToast(error.message, true);
+      return;
+    }
   }
-  if ([...refs.targetLanguage.options].some((option) => option.value === record.target_lang)) {
-    refs.targetLanguage.value = record.target_lang;
+  resetMemoryEditing();
+  state.activeRecordId = record.is_memory_asset ? record.history_id : record.id;
+  state.activeMemoryId = record.approved_memory_id || null;
+  state.activeMemoryRevision = openedRecord.revision || record.approved_revision || null;
+  refs.sourceText.value = openedRecord.source_text;
+  if ([...refs.sourceLanguage.options].some((option) => option.value === openedRecord.source_lang)) {
+    refs.sourceLanguage.value = openedRecord.source_lang;
   }
-  if ([...refs.modelSelect.options].some((option) => option.value === record.model_id)) {
-    refs.modelSelect.value = record.model_id;
+  if ([...refs.targetLanguage.options].some((option) => option.value === openedRecord.target_lang)) {
+    refs.targetLanguage.value = openedRecord.target_lang;
   }
-  showTranslation(record.translated_text);
-  refs.translationMeta.textContent = `${record.model_label} · ${formatLatency(record.latency_ms)}`;
-  refs.historyState.textContent = "암호화 기록에서 열림";
-  refs.deleteActive.hidden = false;
-  renderQa(record.qa_warnings);
+  if ([...refs.modelSelect.options].some((option) => option.value === openedRecord.model_id)) {
+    refs.modelSelect.value = openedRecord.model_id;
+  }
+  showTranslation(openedRecord.translated_text);
+  const memoryMeta = state.activeMemoryRevision ? ` · 자산 v${state.activeMemoryRevision}` : "";
+  refs.translationMeta.textContent = `${openedRecord.model_label} · ${formatLatency(openedRecord.latency_ms)}${memoryMeta}`;
+  refs.historyState.textContent = state.activeMemoryId ? "승인 번역 자산에서 열림" : "암호화 기록에서 열림";
+  refs.deleteActive.hidden = !state.activeRecordId;
+  updateMemoryControls();
+  renderQa(openedRecord.qa_warnings);
   updateCharacterCount();
   updateModelDescription();
   renderHistory();
@@ -400,15 +477,132 @@ async function toggleFavorite(record) {
   }
 }
 
+async function handleMemoryAction() {
+  if (!state.activeMemoryId) {
+    if (!state.activeRecordId) return;
+    try {
+      const memory = await api(`/api/history/${encodeURIComponent(state.activeRecordId)}/approve`, {
+        method: "POST",
+      });
+      state.activeMemoryId = memory.id;
+      state.activeMemoryRevision = memory.revision;
+      const active = state.records.find((record) => record.id === state.activeRecordId);
+      if (active) {
+        active.approved_memory_id = memory.id;
+        active.approved_revision = memory.revision;
+      }
+      refs.historyState.textContent = `번역 자산으로 승인됨 · v${memory.revision}`;
+      updateMemoryControls();
+      await loadHistory();
+      showToast("이 번역을 재사용 가능한 로컬 자산으로 승인했습니다.");
+    } catch (error) {
+      showToast(error.message, true);
+    }
+    return;
+  }
+
+  if (!state.editingMemory) {
+    state.editingMemory = true;
+    state.memoryEditOriginal = refs.translatedText.value;
+    refs.translatedText.readOnly = false;
+    refs.translatedText.focus();
+    refs.memoryAction.textContent = `v${state.activeMemoryRevision + 1}로 저장`;
+    refs.cancelMemoryEdit.hidden = false;
+    refs.deleteMemory.hidden = true;
+    refs.historyState.textContent = "번역 자산 수정 중 · 저장하면 새 버전이 추가됩니다";
+    return;
+  }
+
+  try {
+    const memory = await api(`/api/memory/${encodeURIComponent(state.activeMemoryId)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        source_text: refs.sourceText.value,
+        translated_text: refs.translatedText.value,
+        source_lang: refs.sourceLanguage.value,
+        target_lang: refs.targetLanguage.value,
+      }),
+    });
+    state.activeMemoryRevision = memory.revision;
+    resetMemoryEditing();
+    updateMemoryControls();
+    renderQa(memory.qa_warnings);
+    refs.historyState.textContent = `번역 자산 수정 저장됨 · v${memory.revision}`;
+    refs.translationMeta.textContent = `${memory.model_label} · 자산 v${memory.revision}`;
+    await loadHistory();
+    showToast(`이전 내용은 유지하고 v${memory.revision}을 추가했습니다.`);
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+function cancelMemoryEdit() {
+  resetMemoryEditing(true);
+  updateMemoryControls();
+  refs.historyState.textContent = `번역 자산 v${state.activeMemoryRevision} · 수정 취소됨`;
+}
+
+function resetMemoryEditing(restore = false) {
+  if (restore && state.editingMemory) refs.translatedText.value = state.memoryEditOriginal;
+  state.editingMemory = false;
+  state.memoryEditOriginal = "";
+  refs.translatedText.readOnly = true;
+  refs.cancelMemoryEdit.hidden = true;
+}
+
+function updateMemoryControls() {
+  if (state.editingMemory) return;
+  refs.deleteMemory.hidden = !state.activeMemoryId;
+  if (state.activeMemoryId) {
+    refs.memoryAction.hidden = false;
+    refs.memoryAction.textContent = `번역 자산 v${state.activeMemoryRevision} 수정`;
+    return;
+  }
+  refs.memoryAction.hidden = !state.activeRecordId;
+  refs.memoryAction.textContent = "번역 자산으로 승인";
+}
+
+async function deleteActiveMemory() {
+  if (!state.activeMemoryId) return;
+  if (!window.confirm("이 승인 번역 자산과 모든 이전 버전을 삭제할까요? 원본 번역 기록은 유지됩니다.")) {
+    return;
+  }
+  try {
+    await api(`/api/memory/${encodeURIComponent(state.activeMemoryId)}`, { method: "DELETE" });
+    const active = state.records.find(
+      (record) => record.approved_memory_id === state.activeMemoryId || record.id === state.activeRecordId,
+    );
+    if (active) {
+      active.approved_memory_id = null;
+      active.approved_revision = null;
+    }
+    resetMemoryEditing();
+    state.activeMemoryId = null;
+    state.activeMemoryRevision = null;
+    updateMemoryControls();
+    refs.historyState.textContent = state.activeRecordId ? "번역 자산 삭제됨 · 기록은 유지됨" : "번역 자산 삭제됨";
+    await loadHistory();
+    showToast("승인 번역 자산과 버전을 삭제했습니다.");
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
 async function deleteActiveRecord() {
   if (!state.activeRecordId) return;
-  if (!window.confirm("이 번역 기록을 로컬 기록고에서 삭제할까요?")) return;
+  const confirmation = state.activeMemoryId
+    ? "이 번역 기록만 삭제할까요? 승인한 번역 자산과 버전은 그대로 유지됩니다."
+    : "이 번역 기록을 로컬 기록고에서 삭제할까요?";
+  if (!window.confirm(confirmation)) return;
 
   try {
     await api(`/api/history/${encodeURIComponent(state.activeRecordId)}`, { method: "DELETE" });
     state.activeRecordId = null;
     refs.deleteActive.hidden = true;
-    refs.historyState.textContent = "기록 삭제됨";
+    resetMemoryEditing();
+    updateMemoryControls();
+    refs.historyState.textContent = state.activeMemoryId ? "기록 삭제됨 · 번역 자산은 유지됨" : "기록 삭제됨";
     await loadHistory();
     showToast("번역 기록을 삭제했습니다.");
   } catch (error) {
@@ -451,8 +645,12 @@ function swapLanguages() {
 
 function clearWorkspace() {
   refs.sourceText.value = "";
+  resetMemoryEditing();
   state.activeRecordId = null;
+  state.activeMemoryId = null;
+  state.activeMemoryRevision = null;
   refs.deleteActive.hidden = true;
+  updateMemoryControls();
   setEmptyOutput("번역 결과가 여기에 표시됩니다", "모든 처리는 선택한 개인 장치 안에서 이루어집니다.");
   refs.historyState.textContent = refs.saveHistory.checked ? "기록 저장 켜짐" : "비공개 번역 모드";
   renderQa([]);

@@ -1,10 +1,14 @@
 mod api;
+mod backend;
 mod config;
 mod crypto;
 mod engine;
+mod engine_manager;
 mod history;
 mod pipeline;
 mod runtime;
+mod storage;
+mod translation_memory;
 
 use std::{env, path::PathBuf, process::Command, sync::Arc, time::Duration};
 
@@ -12,15 +16,16 @@ use anyhow::{Context, Result};
 use api::AppState;
 use config::LaunchOptions;
 use crypto::VaultCrypto;
-use history::HistoryStore;
+use engine_manager::EngineManager;
 use reqwest::Client;
+use storage::StorageWorker;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let options = LaunchOptions::from_env_and_args()?;
     let data_dir = data_dir()?;
     let crypto = VaultCrypto::load_or_create(&data_dir)?;
-    let history = Arc::new(HistoryStore::open(&data_dir.join("history.db"), crypto)?);
+    let storage = StorageWorker::start(&data_dir.join("history.db"), crypto)?;
     let client = Client::builder()
         .connect_timeout(Duration::from_secs(5))
         .timeout(Duration::from_secs(120))
@@ -28,10 +33,11 @@ async fn main() -> Result<()> {
         .build()
         .context("로컬 번역 HTTP 클라이언트를 만들 수 없습니다")?;
     let _local_engine = runtime::LocalEngine::ensure(&options.config, &client).await?;
+    let engines = Arc::new(EngineManager::new(&options.config, client));
     let state = AppState {
         config: Arc::new(options.config.clone()),
-        history,
-        client,
+        storage,
+        engines,
     };
     let app = api::router(state);
     let listener = tokio::net::TcpListener::bind(&options.config.bind)

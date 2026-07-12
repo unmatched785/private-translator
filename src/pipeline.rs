@@ -1,9 +1,9 @@
-use std::{collections::VecDeque, time::Instant};
+use std::{collections::VecDeque, error::Error, fmt, time::Instant};
 
 use anyhow::{Context, Result, bail};
-use reqwest::Client;
 
 use crate::{
+    backend::TranslationBackend,
     config::{ModelConfig, ModelFamily},
     engine::{self, TranslateRequest},
 };
@@ -25,10 +25,22 @@ struct TextChunk {
     separator_after: String,
 }
 
+#[derive(Debug)]
+pub struct SupersededRequest;
+
+impl fmt::Display for SupersededRequest {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("더 최신 번역 요청으로 교체되었습니다")
+    }
+}
+
+impl Error for SupersededRequest {}
+
 pub async fn run(
-    client: &Client,
+    backend: &dyn TranslationBackend,
     model: &ModelConfig,
     request: &TranslateRequest,
+    is_current: &(dyn Fn() -> bool + Send + Sync),
 ) -> Result<TranslationResult> {
     let started = Instant::now();
     let prompt_budget = prompt_budget(model)?;
@@ -41,9 +53,11 @@ pub async fn run(
     let mut chunk_count = 0;
 
     while let Some(chunk) = pending.pop_front() {
+        ensure_current(is_current)?;
         let mut chunk_request = request.clone();
         chunk_request.text = chunk.text.clone();
-        let prompt_tokens = engine::count_prompt_tokens(client, model, &chunk_request).await;
+        let prompt_tokens = backend.count_prompt_tokens(model, &chunk_request).await;
+        ensure_current(is_current)?;
 
         if model.family != ModelFamily::Mock && prompt_tokens > prompt_budget {
             push_split(&mut pending, chunk, chunk_count)?;
@@ -54,7 +68,10 @@ pub async fn run(
             .context_tokens
             .saturating_sub(prompt_tokens.saturating_add(CONTEXT_SAFETY_TOKENS));
         let max_tokens = model.max_output_tokens.min(available_output);
-        let result = engine::translate_once(client, model, &chunk_request, max_tokens).await?;
+        let result = backend
+            .translate_once(model, &chunk_request, max_tokens)
+            .await?;
+        ensure_current(is_current)?;
 
         if result.truncated {
             push_split(&mut pending, chunk, chunk_count)?;
@@ -69,6 +86,7 @@ pub async fn run(
     if chunk_count == 0 {
         bail!("번역할 텍스트 구간을 만들 수 없습니다");
     }
+    ensure_current(is_current)?;
     let latency_ms = started.elapsed().as_millis() as u64;
     let qa_warnings = engine::qa_warnings(&request.text, &translated_text);
     Ok(TranslationResult {
@@ -77,6 +95,13 @@ pub async fn run(
         qa_warnings,
         chunk_count,
     })
+}
+
+fn ensure_current(is_current: &(dyn Fn() -> bool + Send + Sync)) -> Result<()> {
+    if !is_current() {
+        return Err(SupersededRequest.into());
+    }
+    Ok(())
 }
 
 fn prompt_budget(model: &ModelConfig) -> Result<usize> {

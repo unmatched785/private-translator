@@ -615,6 +615,8 @@ input:focus-visible {
 .card-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 4px;
 }
 
@@ -667,6 +669,11 @@ input:focus-visible {
 
 .output-text.visible {
   display: block;
+}
+
+.output-text:not([readonly]) {
+  background: #fffef7;
+  box-shadow: inset 0 0 0 2px rgba(50, 112, 82, 0.22);
 }
 
 .output-state {

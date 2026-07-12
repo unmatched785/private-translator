@@ -9,21 +9,22 @@ use axum::{
     response::{Html, IntoResponse, Response},
     routing::{get, patch, post},
 };
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     config::{AppConfig, ModelConfig},
     engine::{self, TranslateRequest},
-    history::{HistoryFilter, HistoryRecord, HistoryStore, NewHistoryRecord},
-    pipeline,
+    engine_manager::{EngineManager, EngineQueueStatus, TranslateError},
+    history::{HistoryFilter, HistoryRecord, NewHistoryRecord},
+    storage::StorageWorker,
+    translation_memory::{NewMemoryRevision, TranslationMemoryRecord},
 };
 
 #[derive(Clone)]
 pub struct AppState {
     pub config: Arc<AppConfig>,
-    pub history: Arc<HistoryStore>,
-    pub client: Client,
+    pub storage: StorageWorker,
+    pub engines: Arc<EngineManager>,
 }
 
 pub fn router(state: AppState) -> Router {
@@ -37,6 +38,13 @@ pub fn router(state: AppState) -> Router {
         .route("/api/history", get(list_history))
         .route("/api/history/{id}", get(get_history).delete(delete_history))
         .route("/api/history/{id}/favorite", patch(set_favorite))
+        .route("/api/history/{id}/approve", post(approve_history))
+        .route("/api/memory", get(list_memory))
+        .route(
+            "/api/memory/{id}",
+            get(get_memory).put(revise_memory).delete(delete_memory),
+        )
+        .route("/api/memory/{id}/revisions", get(list_memory_revisions))
         .fallback(not_found)
         .layer(middleware::from_fn(local_security))
         .with_state(state)
@@ -85,12 +93,13 @@ async fn get_config(State(state): State<AppState>) -> Json<PublicConfig> {
 }
 
 async fn get_health(State(state): State<AppState>) -> Result<Json<HealthResponse>, ApiError> {
-    let history_count = state.history.count().map_err(ApiError::internal)?;
+    let history_count = state.storage.count().await.map_err(ApiError::internal)?;
     Ok(Json(HealthResponse {
         status: "ok",
         profile: state.config.profile.clone(),
         vault: "encrypted",
         history_count,
+        engine: state.engines.status(),
     }))
 }
 
@@ -111,19 +120,30 @@ async fn translate(
     if request.target == "auto" {
         return Err(ApiError::bad_request("대상 언어를 선택하세요"));
     }
+    validate_request_identity(&request)?;
 
     let model = state
         .config
         .model(&request.model)
         .ok_or_else(|| ApiError::bad_request("선택한 모델이 현재 프로필에 없습니다"))?;
-    let engine_result = pipeline::run(&state.client, model, &request)
+    let engine_result = state
+        .engines
+        .translate(&request)
         .await
-        .map_err(|error| ApiError::unavailable(error.to_string()))?;
+        .map_err(|error| match error {
+            TranslateError::UnknownModel => {
+                ApiError::bad_request("선택한 모델이 현재 프로필에 없습니다")
+            }
+            TranslateError::Superseded => {
+                ApiError::conflict("더 최신 번역 요청으로 교체되었습니다")
+            }
+            TranslateError::Failed(error) => ApiError::unavailable(error.to_string()),
+        })?;
 
     let mut history_id = None;
     if request.save_history {
         let record = state
-            .history
+            .storage
             .insert(NewHistoryRecord {
                 source_text: request.text.clone(),
                 translated_text: engine_result.translated_text.clone(),
@@ -136,6 +156,7 @@ async fn translate(
                 latency_ms: engine_result.latency_ms,
                 qa_warnings: engine_result.qa_warnings.clone(),
             })
+            .await
             .map_err(ApiError::internal)?;
         history_id = Some(record.id);
     }
@@ -154,17 +175,37 @@ async fn translate(
     }))
 }
 
+fn validate_request_identity(request: &TranslateRequest) -> Result<(), ApiError> {
+    match (&request.client_id, request.request_seq) {
+        (None, None) => Ok(()),
+        (Some(client_id), Some(sequence))
+            if sequence > 0
+                && (1..=64).contains(&client_id.len())
+                && client_id.bytes().all(|byte| {
+                    byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.')
+                }) =>
+        {
+            Ok(())
+        }
+        _ => Err(ApiError::bad_request(
+            "번역 요청 식별자가 올바르지 않습니다",
+        )),
+    }
+}
+
 async fn list_history(
     State(state): State<AppState>,
     Query(query): Query<HistoryQuery>,
 ) -> Result<Json<HistoryListResponse>, ApiError> {
     let records = state
-        .history
+        .storage
         .list(HistoryFilter {
             query: query.q,
             favorites_only: query.favorites.unwrap_or(false),
+            approved_only: query.approved.unwrap_or(false),
             limit: query.limit.unwrap_or(100),
         })
+        .await
         .map_err(ApiError::internal)?;
     Ok(Json(HistoryListResponse { records }))
 }
@@ -174,8 +215,9 @@ async fn get_history(
     Path(id): Path<String>,
 ) -> Result<Json<HistoryRecord>, ApiError> {
     state
-        .history
+        .storage
         .get(&id)
+        .await
         .map_err(ApiError::internal)?
         .map(Json)
         .ok_or_else(|| ApiError::not_found("번역 기록을 찾을 수 없습니다"))
@@ -187,8 +229,9 @@ async fn set_favorite(
     Json(request): Json<FavoriteRequest>,
 ) -> Result<StatusCode, ApiError> {
     if state
-        .history
+        .storage
         .set_favorite(&id, request.favorite)
+        .await
         .map_err(ApiError::internal)?
     {
         Ok(StatusCode::NO_CONTENT)
@@ -201,10 +244,128 @@ async fn delete_history(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
-    if state.history.delete(&id).map_err(ApiError::internal)? {
+    if state
+        .storage
+        .delete(&id)
+        .await
+        .map_err(ApiError::internal)?
+    {
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(ApiError::not_found("번역 기록을 찾을 수 없습니다"))
+    }
+}
+
+async fn approve_history(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<TranslationMemoryRecord>, ApiError> {
+    state
+        .storage
+        .approve_history(&id)
+        .await
+        .map_err(ApiError::internal)?
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found("승인할 번역 기록을 찾을 수 없습니다"))
+}
+
+async fn list_memory(
+    State(state): State<AppState>,
+    Query(query): Query<MemoryQuery>,
+) -> Result<Json<MemoryListResponse>, ApiError> {
+    let records = state
+        .storage
+        .list_memory(query.limit.unwrap_or(100))
+        .await
+        .map_err(ApiError::internal)?;
+    Ok(Json(MemoryListResponse { records }))
+}
+
+async fn get_memory(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<TranslationMemoryRecord>, ApiError> {
+    state
+        .storage
+        .get_memory(&id)
+        .await
+        .map_err(ApiError::internal)?
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found("번역 자산을 찾을 수 없습니다"))
+}
+
+async fn revise_memory(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(request): Json<MemoryRevisionRequest>,
+) -> Result<Json<TranslationMemoryRecord>, ApiError> {
+    if request.source_text.trim().is_empty() || request.translated_text.trim().is_empty() {
+        return Err(ApiError::bad_request("원문과 번역문을 모두 입력하세요"));
+    }
+    if request.source_text.chars().count() > state.config.max_text_chars
+        || request.translated_text.chars().count() > state.config.max_text_chars
+    {
+        return Err(ApiError::bad_request(format!(
+            "번역 자산의 원문과 번역문은 각각 {}자 이하여야 합니다",
+            state.config.max_text_chars
+        )));
+    }
+    if request.target_lang == "auto" {
+        return Err(ApiError::bad_request("대상 언어를 선택하세요"));
+    }
+    let qa_warnings = engine::qa_warnings(&request.source_text, &request.translated_text);
+    state
+        .storage
+        .revise_memory(
+            &id,
+            NewMemoryRevision {
+                source_text: request.source_text,
+                translated_text: request.translated_text,
+                source_lang: request.source_lang,
+                target_lang: request.target_lang,
+                qa_warnings,
+            },
+        )
+        .await
+        .map_err(ApiError::internal)?
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found("수정할 번역 자산을 찾을 수 없습니다"))
+}
+
+async fn list_memory_revisions(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<MemoryListResponse>, ApiError> {
+    if state
+        .storage
+        .get_memory(&id)
+        .await
+        .map_err(ApiError::internal)?
+        .is_none()
+    {
+        return Err(ApiError::not_found("번역 자산을 찾을 수 없습니다"));
+    }
+    let records = state
+        .storage
+        .list_memory_revisions(&id)
+        .await
+        .map_err(ApiError::internal)?;
+    Ok(Json(MemoryListResponse { records }))
+}
+
+async fn delete_memory(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    if state
+        .storage
+        .delete_memory(&id)
+        .await
+        .map_err(ApiError::internal)?
+    {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(ApiError::not_found("삭제할 번역 자산을 찾을 수 없습니다"))
     }
 }
 
@@ -293,6 +454,7 @@ struct HealthResponse {
     profile: String,
     vault: &'static str,
     history_count: u64,
+    engine: EngineQueueStatus,
 }
 
 #[derive(Debug, Serialize)]
@@ -313,12 +475,31 @@ struct TranslateResponse {
 struct HistoryQuery {
     q: Option<String>,
     favorites: Option<bool>,
+    approved: Option<bool>,
     limit: Option<usize>,
 }
 
 #[derive(Debug, Serialize)]
 struct HistoryListResponse {
     records: Vec<HistoryRecord>,
+}
+
+#[derive(Debug, Deserialize)]
+struct MemoryQuery {
+    limit: Option<usize>,
+}
+
+#[derive(Debug, Serialize)]
+struct MemoryListResponse {
+    records: Vec<TranslationMemoryRecord>,
+}
+
+#[derive(Debug, Deserialize)]
+struct MemoryRevisionRequest {
+    source_text: String,
+    translated_text: String,
+    source_lang: String,
+    target_lang: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -360,6 +541,13 @@ impl ApiError {
     fn unavailable(message: impl Into<String>) -> Self {
         Self {
             status: StatusCode::SERVICE_UNAVAILABLE,
+            message: message.into(),
+        }
+    }
+
+    fn conflict(message: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::CONFLICT,
             message: message.into(),
         }
     }

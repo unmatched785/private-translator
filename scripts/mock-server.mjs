@@ -7,6 +7,7 @@ import path from "node:path";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const records = [];
+const memories = [];
 
 const config = {
   profile: "demo",
@@ -75,6 +76,8 @@ const server = http.createServer(async (request, response) => {
           privacy: "device",
           latency_ms: Math.max(24, Date.now() - started),
           qa_warnings: [],
+          approved_memory_id: null,
+          approved_revision: null,
         });
       }
       await new Promise((resolve) => setTimeout(resolve, 180));
@@ -101,6 +104,9 @@ const server = http.createServer(async (request, response) => {
       });
       return json(response, 200, { records: filtered });
     }
+    if (request.method === "GET" && url.pathname === "/api/memory") {
+      return json(response, 200, { records: memories.map(publicMemory) });
+    }
 
     const favoriteMatch = url.pathname.match(/^\/api\/history\/([^/]+)\/favorite$/);
     if (request.method === "PATCH" && favoriteMatch) {
@@ -112,10 +118,81 @@ const server = http.createServer(async (request, response) => {
       return response.end();
     }
 
+    const approveMatch = url.pathname.match(/^\/api\/history\/([^/]+)\/approve$/);
+    if (request.method === "POST" && approveMatch) {
+      const record = records.find((item) => item.id === decodeURIComponent(approveMatch[1]));
+      if (!record) return json(response, 404, { error: { message: "기록을 찾을 수 없습니다" } });
+      let memory = memories.find((item) => item.history_id === record.id);
+      if (!memory) {
+        const now = Date.now();
+        memory = {
+          ...record,
+          id: randomUUID(),
+          history_id: record.id,
+          created_at: now,
+          updated_at: now,
+          revision: 1,
+          revision_created_at: now,
+          revision_kind: "approved",
+          revisions: [],
+        };
+        memory.revisions.push(publicMemory(memory));
+        memories.unshift(memory);
+        record.approved_memory_id = memory.id;
+        record.approved_revision = 1;
+      }
+      return json(response, 200, publicMemory(memory));
+    }
+
+    const revisionsMatch = url.pathname.match(/^\/api\/memory\/([^/]+)\/revisions$/);
+    if (request.method === "GET" && revisionsMatch) {
+      const memory = memories.find((item) => item.id === decodeURIComponent(revisionsMatch[1]));
+      if (!memory) return json(response, 404, { error: { message: "번역 자산을 찾을 수 없습니다" } });
+      return json(response, 200, { records: [...memory.revisions].reverse() });
+    }
+
+    const memoryMatch = url.pathname.match(/^\/api\/memory\/([^/]+)$/);
+    if (memoryMatch) {
+      const memoryId = decodeURIComponent(memoryMatch[1]);
+      const memory = memories.find((item) => item.id === memoryId);
+      if (!memory) return json(response, 404, { error: { message: "번역 자산을 찾을 수 없습니다" } });
+      if (request.method === "GET") return json(response, 200, publicMemory(memory));
+      if (request.method === "PUT") {
+        const body = await readJson(request);
+        memory.source_text = body.source_text;
+        memory.translated_text = body.translated_text;
+        memory.source_lang = body.source_lang;
+        memory.target_lang = body.target_lang;
+        memory.revision += 1;
+        memory.revision_kind = "edited";
+        memory.revision_created_at = Date.now();
+        memory.updated_at = memory.revision_created_at;
+        memory.revisions.push(publicMemory(memory));
+        const linked = records.find((item) => item.id === memory.history_id);
+        if (linked) linked.approved_revision = memory.revision;
+        return json(response, 200, publicMemory(memory));
+      }
+      if (request.method === "DELETE") {
+        const linked = records.find((item) => item.id === memory.history_id);
+        if (linked) {
+          linked.approved_memory_id = null;
+          linked.approved_revision = null;
+        }
+        memories.splice(
+          memories.findIndex((item) => item.id === memoryId),
+          1,
+        );
+        response.writeHead(204);
+        return response.end();
+      }
+    }
+
     const historyMatch = url.pathname.match(/^\/api\/history\/([^/]+)$/);
     if (request.method === "DELETE" && historyMatch) {
       const index = records.findIndex((item) => item.id === decodeURIComponent(historyMatch[1]));
       if (index < 0) return json(response, 404, { error: { message: "기록을 찾을 수 없습니다" } });
+      const memory = memories.find((item) => item.history_id === records[index].id);
+      if (memory) memory.history_id = null;
       records.splice(index, 1);
       response.writeHead(204);
       return response.end();
@@ -161,6 +238,11 @@ function mockTranslate(text, target) {
     ["ja", "日本語"],
   ]).get(target) || target;
   return `[로컬 데모 · ${label}] ${String(text).trim()}`;
+}
+
+function publicMemory(memory) {
+  const { revisions, favorite, approved_memory_id, approved_revision, ...record } = memory;
+  return { ...record, qa_warnings: record.qa_warnings || [] };
 }
 
 function setSecurityHeaders(response) {

@@ -9,11 +9,12 @@ Date: 2026-07-12
 ```mermaid
 flowchart LR
     Browser["기본 브라우저 UI"] -->|"127.0.0.1 only"| App["Private Translator"]
-    App --> Vault["암호화 기록고"]
-    App --> Router["모델 라우터"]
-    Router --> Lite["Hy-MT2 1.8B Q4\n노트북 CPU"]
-    Router --> Quality["Hy-MT2 7B Q4\n개인 Mac mini 또는 고사양 PC"]
-    Router --> Compare["TranslateGemma 12B\n비교 후보"]
+    App --> Storage["전용 저장 작업자"]
+    Storage --> Vault["암호화 기록 + 승인 자산 버전"]
+    App --> Manager["EngineManager + 모델별 대기열"]
+    Manager --> Lite["Hy-MT2 1.8B Q4\n노트북 CPU"]
+    Manager --> Quality["Hy-MT2 7B Q4\n개인 Mac mini 또는 고사양 PC"]
+    Manager --> Compare["TranslateGemma 12B\n비교 후보"]
 ```
 
 ## One codebase, two profiles
@@ -66,6 +67,15 @@ SQLite에는 다음 열만 평문으로 존재한다.
 
 현재 검색은 암호화 레코드를 메모리에서 복호화한 뒤 수행한다. 개인 기록 수천~수만 건을 우선 대상으로 하며, 벤치마크 후 SQLCipher/암호화 검색 색인으로 확장한다.
 
+### History vs approved translation memory
+
+- 기록은 번역할 때 자동으로 쌓이는 사건 로그다.
+- 번역 자산은 사용자가 좋은 결과라고 명시적으로 승인한 항목만 들어간다.
+- 자산 수정은 현재 행을 덮어쓰지 않고 암호화된 새 revision을 추가한다.
+- 기록의 삭제는 연결된 자산을 삭제하지 않으며, 자산 삭제는 별도 명시 동작이다.
+- SQLite 작업은 전용 저장 스레드가 직렬 처리해 비동기 HTTP 실행기를 막지 않는다.
+- `PRAGMA user_version` 기반 v1/v2 마이그레이션은 기존 기록을 보존한다.
+
 ## Local API
 
 ```text
@@ -76,6 +86,12 @@ GET    /api/history
 GET    /api/history/:id
 PATCH  /api/history/:id/favorite
 DELETE /api/history/:id
+POST   /api/history/:id/approve
+GET    /api/memory
+GET    /api/memory/:id
+PUT    /api/memory/:id
+DELETE /api/memory/:id
+GET    /api/memory/:id/revisions
 ```
 
 응답에는 `Cache-Control: no-store`, CSP, `Referrer-Policy: no-referrer`를 적용한다. 서버는 loopback Host 헤더만 허용하며 CORS를 열지 않는다.
@@ -89,6 +105,9 @@ DELETE /api/history/:id
 - 숫자와 URL 불일치 시 결과 아래에 QA 경고 표시
 - 모델의 실제 입력 토큰 수를 기준으로 긴 문서를 의미 경계에서 분할
 - 출력 한도 도달 시 더 작은 구간으로 나누어 재시도하고 전체 결과에 QA 수행
+- 백엔드 인터페이스로 HTTP 호환 엔진과 테스트용 엔진을 분리
+- 모델별 동시 실행을 하나로 제한하고 나머지는 대기열에서 순서대로 처리
+- 같은 브라우저 탭의 새 요청이 오면 오래된 대기·실행 요청은 다음 안전 지점에서 중단
 - 모델 오류가 나도 원문을 로그에 포함하지 않음
 
 ## Packaging boundary
@@ -111,6 +130,6 @@ configs/lite.json
 - RAM 용량과 CPU 명령어 집합 감지 및 저사양 경고
 - 유휴 시 모델 언로드
 - 암호화된 휴대용 백업/복원
-- 개인 용어집과 승인된 번역 메모리
+- 개인 용어집과 승인 자산의 문맥 검색·자동 제안
 - 다중 사용자 Hub 인증과 사용자별 기록고
 - 설치 프로그램 서명 및 자동 업데이트
