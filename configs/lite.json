@@ -1,0 +1,30 @@
+{
+  "profile": "lite",
+  "display_name": "Private Translator Lite",
+  "bind": "127.0.0.1:8173",
+  "default_model": "hy-mt2-1.8b-q4",
+  "auto_open": true,
+  "max_text_chars": 50000,
+  "local_engine": {
+    "model_id": "hy-mt2-1.8b-q4",
+    "executable": "runtime/llama.cpp/llama-server.exe",
+    "model_path": "models/Hy-MT2-1.8B-Q4_K_M.gguf",
+    "context_size": 4096,
+    "threads": 0
+  },
+  "models": [
+    {
+      "id": "hy-mt2-1.8b-q4",
+      "label": "Hy-MT2 1.8B · 빠른 로컬",
+      "description": "일반 사무용 노트북 CPU를 위한 기본 모델",
+      "endpoint": "http://127.0.0.1:8080/v1",
+      "api_model": "hy-mt2-1.8b",
+      "family": "hy_mt2",
+      "privacy": "device",
+      "temperature": 0.7,
+      "top_p": 0.6,
+      "top_k": 20,
+      "repeat_penalty": 1.05
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+/target/
+/.cache/
+/.data/
+/dist/
+/models/
+/runtime/
+/.codex-remote-attachments/
+*.log
+*.tmp

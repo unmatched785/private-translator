@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <meta name="description" content="내 장치 안에서만 번역하고 기록하는 로컬 번역기" />
+    <title>Private Translator</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+
+    <header class="topbar">
+      <div class="brand-group">
+        <button id="historyToggle" class="icon-button mobile-only" type="button" aria-label="번역 기록 열기">☰</button>
+        <div class="brand-mark" aria-hidden="true">私</div>
+        <div>
+          <div class="brand-name">Private Translator</div>
+          <div class="brand-subtitle">내 장치 안에서 번역하고, 내 기록으로 남깁니다</div>
+        </div>
+      </div>
+      <div class="topbar-status">
+        <span id="profileBadge" class="profile-badge">불러오는 중</span>
+        <span class="privacy-badge"><span class="status-dot"></span>외부 전송 없음</span>
+      </div>
+    </header>
+
+    <main class="app-shell">
+      <aside id="historyPanel" class="history-panel" aria-label="번역 기록">
+        <div class="history-header">
+          <div>
+            <p class="eyebrow">LOCAL VAULT</p>
+            <h1>번역 기록</h1>
+          </div>
+          <button id="historyClose" class="icon-button mobile-only" type="button" aria-label="번역 기록 닫기">×</button>
+        </div>
+
+        <label class="search-field">
+          <span aria-hidden="true">⌕</span>
+          <input id="historySearch" type="search" placeholder="원문과 번역문 검색" autocomplete="off" />
+        </label>
+
+        <div class="history-filters" role="group" aria-label="기록 필터">
+          <button class="filter-chip active" type="button" data-filter="all">전체</button>
+          <button class="filter-chip" type="button" data-filter="favorites">★ 즐겨찾기</button>
+        </div>
+
+        <div id="historyList" class="history-list" aria-live="polite">
+          <div class="history-empty loading-state">암호화 기록고를 여는 중…</div>
+        </div>
+
+        <div class="vault-note">
+          <div class="vault-icon" aria-hidden="true">⌾</div>
+          <div>
+            <strong>Windows 계정으로 보호됨</strong>
+            <span>원문과 번역문은 암호화된 로컬 기록고에만 저장됩니다.</span>
+          </div>
+        </div>
+      </aside>
+
+      <section class="translator-workspace">
+        <div class="workspace-heading">
+          <div>
+            <p class="eyebrow">PRIVATE BY DEFAULT</p>
+            <h2>붙여넣으면 바로 번역됩니다</h2>
+            <p>계정도, 업로드도, 전송 버튼도 필요 없습니다.</p>
+          </div>
+          <div class="save-control">
+            <label class="switch-label" for="saveHistory">
+              <span>
+                <strong>기록 저장</strong>
+                <small id="saveHint">암호화하여 로컬에 보관</small>
+              </span>
+              <span class="switch">
+                <input id="saveHistory" type="checkbox" checked />
+                <span class="switch-track"></span>
+              </span>
+            </label>
+          </div>
+        </div>
+
+        <div class="language-bar">
+          <label class="select-wrap">
+            <span class="select-label">원문</span>
+            <select id="sourceLanguage" aria-label="원문 언어"></select>
+          </label>
+          <button id="swapLanguages" class="swap-button" type="button" aria-label="언어 맞바꾸기">⇄</button>
+          <label class="select-wrap">
+            <span class="select-label">번역</span>
+            <select id="targetLanguage" aria-label="번역 언어"></select>
+          </label>
+          <div class="language-spacer"></div>
+          <label class="select-wrap model-select-wrap">
+            <span class="select-label">모델</span>
+            <select id="modelSelect" aria-label="번역 모델"></select>
+          </label>
+        </div>
+
+        <div class="translation-grid">
+          <article class="translation-card source-card">
+            <div class="card-header">
+              <span>원문</span>
+              <button id="clearSource" class="text-button" type="button">지우기</button>
+            </div>
+            <textarea
+              id="sourceText"
+              class="translation-textarea"
+              placeholder="번역할 내용을 여기에 붙여넣으세요"
+              spellcheck="false"
+              autofocus
+            ></textarea>
+            <div class="card-footer">
+              <span id="characterCount">0자</span>
+              <span class="paste-hint">붙여넣기 시 자동 번역 · Ctrl+Enter</span>
+            </div>
+          </article>
+
+          <article class="translation-card output-card">
+            <div class="card-header">
+              <span>번역문</span>
+              <div class="card-actions">
+                <button id="deleteActive" class="text-button danger-button" type="button" hidden>기록 삭제</button>
+                <button id="copyOutput" class="text-button" type="button">복사</button>
+              </div>
+            </div>
+            <div id="outputState" class="output-state empty">
+              <div class="empty-orbit" aria-hidden="true"><span></span></div>
+              <strong>번역 결과가 여기에 표시됩니다</strong>
+              <span>모든 처리는 선택한 개인 장치 안에서 이루어집니다.</span>
+            </div>
+            <textarea id="translatedText" class="translation-textarea output-text" readonly aria-label="번역 결과"></textarea>
+            <div class="card-footer output-footer">
+              <span id="translationMeta">준비됨</span>
+              <span id="historyState">기록 저장 켜짐</span>
+            </div>
+          </article>
+        </div>
+
+        <div id="qaPanel" class="qa-panel" hidden></div>
+
+        <div class="action-row">
+          <div class="model-note">
+            <span class="model-note-dot"></span>
+            <span id="modelDescription">모델 정보를 불러오는 중입니다.</span>
+          </div>
+          <button id="translateButton" class="primary-button" type="button">
+            <span class="button-label">번역하기</span>
+            <span class="button-shortcut">Ctrl ↵</span>
+          </button>
+        </div>
+
+        <footer class="privacy-footer">
+          <span class="lock-symbol" aria-hidden="true">▣</span>
+          <span><strong>로컬 처리:</strong> 번역 내용은 주소, 로그, 분석 도구에 남기지 않습니다.</span>
+        </footer>
+      </section>
+    </main>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <div id="mobileScrim" class="mobile-scrim"></div>
+    <script src="/app.js" defer></script>
+  </body>
+</html>

@@ -1,0 +1,33 @@
+[package]
+name = "private-translator"
+version = "0.1.0"
+edition = "2024"
+description = "Private, local-first translation gateway with an encrypted history vault"
+license = "MIT"
+
+[dependencies]
+aes-gcm = "0.10"
+anyhow = "1"
+axum = "0.8"
+getrandom = "0.3"
+regex = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+rusqlite = { version = "0.37", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal", "time"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[target.'cfg(not(windows))'.dependencies]
+argon2 = "0.5"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_System_JobObjects"] }
+
+[profile.release]
+lto = "thin"
+strip = true
+codegen-units = 1

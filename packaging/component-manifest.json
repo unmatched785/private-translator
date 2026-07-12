@@ -1,0 +1,23 @@
+{
+  "built_at": "2026-07-12",
+  "application": {
+    "name": "Private Translator",
+    "version": "0.1.0"
+  },
+  "runtime": {
+    "name": "llama.cpp",
+    "tag": "b9966",
+    "commit": "c749cb041",
+    "asset": "llama-b9966-bin-win-cpu-x64.zip",
+    "sha256": "a2e791df47c8abd09e23f85a00699d6d6552445f6bba21e810263eaeefbf672a",
+    "source": "https://github.com/ggml-org/llama.cpp/releases/tag/b9966"
+  },
+  "lite_model": {
+    "name": "Tencent Hy-MT2 1.8B Q4_K_M",
+    "file": "Hy-MT2-1.8B-Q4_K_M.gguf",
+    "bytes": 1133080448,
+    "sha256": "dc5f44fcf1fa496ee7ad725982c0c8c553a4de00259b53af84c4b89fb0c06699",
+    "license": "Apache-2.0",
+    "source": "https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF"
+  }
+}

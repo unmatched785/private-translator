@@ -1,0 +1,22 @@
+{
+  "profile": "demo",
+  "display_name": "Private Translator Demo",
+  "bind": "127.0.0.1:8173",
+  "default_model": "local-demo",
+  "auto_open": false,
+  "max_text_chars": 50000,
+  "models": [
+    {
+      "id": "local-demo",
+      "label": "로컬 데모 엔진",
+      "description": "화면과 암호화 기록 검증 전용",
+      "endpoint": "mock://local",
+      "api_model": "local-demo",
+      "family": "mock",
+      "privacy": "device",
+      "temperature": 0.0,
+      "top_p": 1.0
+    }
+  ]
+}
+
