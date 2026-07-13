@@ -15,6 +15,20 @@ $trustedManifest = Get-Content -LiteralPath $trustedManifestPath -Raw | ConvertF
 if ($trustedManifest.schema_version -ne 1) {
     throw "Unsupported trusted artifact manifest version: $($trustedManifest.schema_version)"
 }
+if ($componentManifest.runtime.packaged_entrypoint -ne "llama-server.exe" -or
+    [int] $componentManifest.runtime.packaged_file_count -ne @($trustedManifest.runtime.files).Count) {
+    throw "Component manifest runtime packaging policy does not match the trusted runtime inventory."
+}
+$llamaLicense = $trustedManifest.licenses | Where-Object { $_.id -eq "llama.cpp" } | Select-Object -First 1
+$modelLicense = $trustedManifest.licenses | Where-Object { $_.id -eq "hy-mt2-1.8b" } | Select-Object -First 1
+if ($null -eq $llamaLicense -or $null -eq $modelLicense -or
+    @($trustedManifest.licenses).Count -ne 2 -or
+    $componentManifest.runtime.license.sha256 -ne $llamaLicense.sha256 -or
+    $componentManifest.runtime.license.source -ne $llamaLicense.source -or
+    $componentManifest.lite_model.license_sha256 -ne $modelLicense.sha256 -or
+    $componentManifest.lite_model.license_source -ne $modelLicense.source) {
+    throw "Component and trusted manifest license metadata do not match."
+}
 
 $cacheDirectory = Join-Path $root ".cache\bootstrap"
 $runtimeDirectory = Join-Path $root "runtime\llama.cpp"
@@ -156,28 +170,27 @@ if ($Force -or -not (Test-FileSpecification -Path $modelPath -Specification $mod
     Move-Item -LiteralPath $modelDownload -Destination $modelPath -Force
 }
 
-$licenses = @(
-    @{
-        Uri = "https://raw.githubusercontent.com/ggml-org/llama.cpp/$($componentManifest.runtime.tag)/LICENSE"
-        Destination = Join-Path $licenseDirectory "llama.cpp-LICENSE"
-    },
-    @{
-        Uri = "https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF/resolve/main/LICENSE.txt?download=true"
-        Destination = Join-Path $licenseDirectory "Hy-MT2-LICENSE"
+if (@($trustedManifest.licenses).Count -ne 2) {
+    throw "The trusted artifact manifest must contain exactly the llama.cpp and Hy-MT2 licenses."
+}
+foreach ($license in $trustedManifest.licenses) {
+    if ((Split-Path -Leaf $license.path) -ne $license.path) {
+        throw "Nested license paths are not allowed in the trusted manifest."
     }
-)
-foreach ($license in $licenses) {
-    if ($Force -or -not (Test-Path -LiteralPath $license.Destination -PathType Leaf)) {
-        Get-RemoteFile -Uri $license.Uri -Destination $license.Destination
+    $destination = Join-Path $licenseDirectory $license.path
+    if ($Force -or -not (Test-FileSpecification -Path $destination -Specification $license)) {
+        Get-RemoteFile -Uri $license.source -Destination $destination
     }
-    if ((Get-Item -LiteralPath $license.Destination).Length -lt 500) {
-        throw "Downloaded license file is unexpectedly small: $($license.Destination)"
-    }
+    Assert-FileSpecification -Path $destination -Specification $license
 }
 
 if (-not (Test-Runtime)) {
     throw "Runtime verification failed after installation."
 }
+$runtimeVersion = & (Join-Path $runtimeDirectory "llama-server.exe") --version 2>&1 | Out-String
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($runtimeVersion)) {
+    throw "The minimized llama-server runtime failed its Windows loader/version smoke test."
+}
 Assert-FileSpecification -Path $modelPath -Specification $modelSpecification
 
-Write-Host "Bootstrap complete. The pinned runtime, model, and licenses are verified."
+Write-Host "Bootstrap complete. The pinned minimized runtime, model, licenses, and Windows loader are verified."

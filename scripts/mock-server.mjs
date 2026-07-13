@@ -25,6 +25,7 @@ const config = {
       label: "Local demo engine",
       description: "Development engine for testing the interface and vault",
       privacy: "device",
+      available: true,
       supported_languages: supportedLanguages,
     },
     {
@@ -32,6 +33,7 @@ const config = {
       label: "Hy-MT2 7B · Interface preview",
       description: "Preview entry for the Quality profile model selector",
       privacy: "private_network",
+      available: false,
       supported_languages: supportedLanguages,
     },
   ],
@@ -53,6 +55,14 @@ const server = http.createServer(async (request, response) => {
     }
     if (request.method === "GET" && url.pathname === "/styles.css") {
       return file(response, "web/styles.css", "text/css; charset=utf-8");
+    }
+    if (
+      url.pathname.startsWith("/api/") &&
+      !/^Bearer [0-9a-f]{64}$/i.test(request.headers.authorization || "")
+    ) {
+      return json(response, 401, {
+        error: { code: "session_required", message: "Open the mock UI with a token fragment." },
+      });
     }
     if (request.method === "GET" && url.pathname === "/api/config") {
       return json(response, 200, config);
@@ -101,8 +111,24 @@ const server = http.createServer(async (request, response) => {
         latency_ms: 180,
         chunk_count: 1,
         history_id: historyId,
+        history_error: null,
         qa_warnings: [],
       });
+    }
+    if (request.method === "POST" && url.pathname === "/api/history/search") {
+      const body = await readJson(request);
+      const query = String(body.query || "").trim().toLocaleLowerCase();
+      const favorites = body.favorites === true;
+      const approved = body.approved === true;
+      const requestedLimit = Number.isInteger(body.limit) ? body.limit : 100;
+      const limit = Math.max(1, Math.min(requestedLimit, 500));
+      const filtered = records.filter((record) => {
+        if (favorites && !record.favorite) return false;
+        if (approved && !record.approved_memory_id) return false;
+        if (!query) return true;
+        return `${record.source_text}\n${record.translated_text}`.toLocaleLowerCase().includes(query);
+      });
+      return json(response, 200, { records: filtered.slice(0, limit) });
     }
     if (request.method === "GET" && url.pathname === "/api/history") {
       const query = (url.searchParams.get("q") || "").toLocaleLowerCase();

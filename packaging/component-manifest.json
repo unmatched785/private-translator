@@ -1,16 +1,26 @@
 {
-  "built_at": "2026-07-12",
+  "built_at": "2026-07-14",
   "application": {
     "name": "Private Translator",
-    "version": "0.1.1"
+    "version": "0.1.2"
   },
   "runtime": {
     "name": "llama.cpp",
     "tag": "b9966",
-    "commit": "c749cb041",
+    "commit": "c749cb041706647f460bb918cccc9d91995205ab",
     "asset": "llama-b9966-bin-win-cpu-x64.zip",
     "sha256": "a2e791df47c8abd09e23f85a00699d6d6552445f6bba21e810263eaeefbf672a",
-    "source": "https://github.com/ggml-org/llama.cpp/releases/tag/b9966"
+    "source": "https://github.com/ggml-org/llama.cpp/releases/tag/b9966",
+    "packaged_entrypoint": "llama-server.exe",
+    "packaged_file_count": 23,
+    "packaged_policy": "server-runtime-closure-with-portable-cpu-backends",
+    "license": {
+      "spdx": "MIT",
+      "file": "llama.cpp-LICENSE",
+      "bytes": 1078,
+      "sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d",
+      "source": "https://raw.githubusercontent.com/ggml-org/llama.cpp/c749cb041706647f460bb918cccc9d91995205ab/LICENSE"
+    }
   },
   "lite_model": {
     "name": "Tencent Hy-MT2 1.8B Q4_K_M",
@@ -18,6 +28,10 @@
     "bytes": 1133080448,
     "sha256": "dc5f44fcf1fa496ee7ad725982c0c8c553a4de00259b53af84c4b89fb0c06699",
     "license": "Apache-2.0",
+    "license_file": "Hy-MT2-LICENSE",
+    "license_bytes": 11639,
+    "license_sha256": "a1d52d448f81c584a47c583e19dfab2d3851c7c84431b07baee093c1113ed114",
+    "license_source": "https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF/resolve/1cd5208700acedef4ef93019b6cfc148b8522d45/LICENSE.txt?download=true",
     "source": "https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF",
     "revision": "1cd5208700acedef4ef93019b6cfc148b8522d45",
     "download_url": "https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF/resolve/1cd5208700acedef4ef93019b6cfc148b8522d45/Hy-MT2-1.8B-Q4_K_M.gguf?download=true"

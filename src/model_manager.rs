@@ -29,6 +29,25 @@ pub fn is_model_command(arguments: &[String]) -> bool {
     )
 }
 
+/// The release packages a byte-for-byte copy of this binary as
+/// `Install-Model.exe`. Only an argument-free launch of that exact filename is
+/// converted to the explicit setup command; ordinary launchers and all
+/// user-supplied arguments retain their normal behavior.
+pub fn arguments_for_executable(arguments: Vec<String>, executable: Option<&Path>) -> Vec<String> {
+    if !arguments.is_empty() {
+        return arguments;
+    }
+    let is_installer = executable
+        .and_then(Path::file_name)
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.eq_ignore_ascii_case("Install-Model.exe"));
+    if is_installer {
+        vec!["setup".to_owned()]
+    } else {
+        arguments
+    }
+}
+
 pub async fn run(arguments: &[String]) -> Result<()> {
     match arguments.first().map(String::as_str) {
         Some("setup") => install(parse_install_options(&arguments[1..])?).await,
@@ -470,6 +489,36 @@ mod tests {
         assert!(is_model_command(&arguments(&["setup"])));
         assert!(is_model_command(&arguments(&["model", "status"])));
         assert!(!is_model_command(&arguments(&["--profile", "lite"])));
+    }
+
+    #[test]
+    fn argument_free_install_model_executable_enters_setup_mode() {
+        assert_eq!(
+            arguments_for_executable(Vec::new(), Some(Path::new("Install-Model.exe"))),
+            arguments(&["setup"])
+        );
+        assert_eq!(
+            arguments_for_executable(Vec::new(), Some(Path::new("install-model.EXE"))),
+            arguments(&["setup"])
+        );
+    }
+
+    #[test]
+    fn installer_filename_never_overrides_explicit_arguments_or_near_matches() {
+        let explicit = arguments(&["model", "status"]);
+        assert_eq!(
+            arguments_for_executable(explicit.clone(), Some(Path::new("Install-Model.exe"))),
+            explicit
+        );
+        assert!(
+            arguments_for_executable(Vec::new(), Some(Path::new("Install-Model-copy.exe")))
+                .is_empty()
+        );
+        assert!(
+            arguments_for_executable(Vec::new(), Some(Path::new("PrivateTranslator-Lite.exe")))
+                .is_empty()
+        );
+        assert!(arguments_for_executable(Vec::new(), None).is_empty());
     }
 
     #[test]

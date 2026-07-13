@@ -3,6 +3,7 @@ use std::{
     env,
     fs::{self, File},
     io::{BufReader, Read},
+    net::{IpAddr, Ipv4Addr, TcpListener},
     path::{Component, Path, PathBuf},
     process::{Child, Command, Stdio},
     time::Duration,
@@ -68,30 +69,20 @@ struct ModelIdentity {
 }
 
 impl LocalEngine {
-    pub async fn ensure(config: &AppConfig, client: &Client) -> Result<Self> {
-        let Some(engine) = &config.local_engine else {
+    pub async fn ensure(config: &mut AppConfig, client: &Client) -> Result<Self> {
+        let Some(engine) = config.local_engine.clone() else {
             return Ok(Self::external());
         };
-        let model = config
-            .model(&engine.model_id)
+        let model_index = config
+            .models
+            .iter()
+            .position(|model| model.id == engine.model_id)
             .context("The configured local model was not found")?;
-        let endpoint =
-            Url::parse(&model.endpoint).context("The local model endpoint is invalid")?;
-        let health_url = health_url(&endpoint);
-        let models_url = models_url(&endpoint);
-
-        if probe_model_identity(client, &health_url, &models_url, &model.api_model).await? {
-            println!(
-                "Local translation engine: using an already running verified model ({}).",
-                model.api_model
-            );
-            return Ok(Self::external());
-        }
-
+        let model = config.models[model_index].clone();
         let bundle_root = bundle_root().context("Could not locate a trusted translator bundle")?;
         let executable = resolve_bundle_path(&bundle_root, &engine.executable)
             .with_context(|| format!("Could not find the local engine: {}", engine.executable))?;
-        let model_path = resolve_model_path(&bundle_root, engine)
+        let model_path = resolve_model_path(&bundle_root, &engine)
             .with_context(|| format!("Could not find the local model: {}", engine.model_path))?;
 
         let executable_for_verification = executable.clone();
@@ -108,13 +99,40 @@ impl LocalEngine {
         .context("The local translation artifact verification task stopped")??;
         println!("Local translation artifact integrity: verified");
 
+        // Choose the private endpoint only after the potentially long artifact
+        // verification, keeping the bind-to-spawn race window as small as the
+        // process API permits.
+        let mut endpoint =
+            Url::parse(&model.endpoint).context("The local model endpoint is invalid")?;
+        let configured_host = endpoint
+            .host_str()
+            .context("The local model endpoint has no host")?;
+        let bind_ip = if configured_host.eq_ignore_ascii_case("localhost") {
+            IpAddr::V4(Ipv4Addr::LOCALHOST)
+        } else {
+            configured_host
+                .parse::<IpAddr>()
+                .context("The managed local model endpoint must use a loopback IP address")?
+        };
+        let reservation = TcpListener::bind((bind_ip, 0))
+            .context("Could not reserve a private port for the local translation engine")?;
+        let port = reservation
+            .local_addr()
+            .context("Could not inspect the reserved local engine port")?
+            .port();
+        drop(reservation);
+        endpoint
+            .set_port(Some(port))
+            .map_err(|_| anyhow::anyhow!("Could not assign the private local engine port"))?;
+        let api_key = random_api_key()?;
+        config.models[model_index].endpoint = endpoint.to_string();
+        config.models[model_index].runtime_api_key = Some(api_key.clone());
+        let health_url = health_url(&endpoint);
+        let models_url = models_url(&endpoint);
         let host = endpoint
             .host_str()
             .context("The local model endpoint has no host")?;
-        let port = endpoint
-            .port()
-            .context("The local model endpoint must include a port")?;
-        let threads = engine_threads(engine);
+        let threads = engine_threads(&engine);
 
         let mut command = Command::new(&executable);
         command.current_dir(
@@ -131,6 +149,8 @@ impl LocalEngine {
             .arg(host)
             .arg("--port")
             .arg(port.to_string())
+            .arg("--api-key")
+            .arg(&api_key)
             .arg("-c")
             .arg(engine.context_size.to_string())
             .arg("-t")
@@ -168,7 +188,21 @@ impl LocalEngine {
         };
 
         for _ in 0..180 {
-            match probe_model_identity(client, &health_url, &models_url, &model.api_model).await {
+            if let Some(status) = child
+                .try_wait()
+                .context("Could not inspect the local translation engine status")?
+            {
+                bail!("The local translation engine exited during startup: {status}");
+            }
+            match probe_model_identity(
+                client,
+                &health_url,
+                &models_url,
+                &model.api_model,
+                Some(&api_key),
+            )
+            .await
+            {
                 Ok(true) => {
                     println!(
                         "Local translation engine: ready (model {}, {threads} threads)",
@@ -186,12 +220,6 @@ impl LocalEngine {
                     let _ = child.wait();
                     return Err(error);
                 }
-            }
-            if let Some(status) = child
-                .try_wait()
-                .context("Could not inspect the local translation engine status")?
-            {
-                bail!("The local translation engine exited during startup: {status}");
             }
             sleep(Duration::from_millis(250)).await;
         }
@@ -306,13 +334,15 @@ async fn probe_model_identity(
     health_url: &Url,
     models_url: &Url,
     expected_model: &str,
+    api_key: Option<&str>,
 ) -> Result<bool> {
-    let health_response = match client
+    let mut health_request = client
         .get(health_url.clone())
-        .timeout(Duration::from_millis(700))
-        .send()
-        .await
-    {
+        .timeout(Duration::from_millis(700));
+    if let Some(api_key) = api_key {
+        health_request = health_request.bearer_auth(api_key);
+    }
+    let health_response = match health_request.send().await {
         Ok(response) => response,
         Err(error) if error.is_connect() || error.is_timeout() => return Ok(false),
         Err(error) => {
@@ -324,9 +354,13 @@ async fn probe_model_identity(
         return Ok(false);
     }
 
-    let response = client
+    let mut models_request = client
         .get(models_url.clone())
-        .timeout(Duration::from_secs(2))
+        .timeout(Duration::from_secs(2));
+    if let Some(api_key) = api_key {
+        models_request = models_request.bearer_auth(api_key);
+    }
+    let response = models_request
         .send()
         .await
         .context("Could not read model information from the running local engine")?;
@@ -358,6 +392,14 @@ async fn probe_model_identity(
     bail!(
         "A different model is running on the local engine port (expected: {expected_model}, actual: {actual})"
     )
+}
+
+fn random_api_key() -> Result<String> {
+    let mut bytes = [0_u8; 32];
+    getrandom::fill(&mut bytes).map_err(|error| {
+        anyhow::anyhow!("Could not generate local engine authentication: {error}")
+    })?;
+    Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
 fn engine_threads(config: &LocalEngineConfig) -> usize {

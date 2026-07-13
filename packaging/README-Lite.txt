@@ -1,8 +1,8 @@
-Private Translator Lite 0.1.1
+Private Translator Lite 0.1.2
 ================================
 
 FIRST RUN
-1. Double-click Install-Model.cmd while online.
+1. Double-click Install-Model.exe while online.
 2. It downloads the pinned official Hy-MT2 model (about 1.13 GB), resumes interrupted downloads, and verifies its size and SHA-256.
 3. Double-click PrivateTranslator-Lite.exe.
 4. Keep the console window open while using the browser interface.
@@ -31,4 +31,4 @@ COMPONENTS
 - Model and runtime SHA-256 verification before launch
 
 NOTICE
-This release is not code-signed. Windows may show an unknown-publisher warning.
+Official public archives require valid Authenticode signatures and RFC 3161 timestamps on the Lite, Quality, and Install-Model executables. The byte-identical upstream llama-server.exe is verified by pinned size and SHA-256. A folder from an UNSIGNED-DEVELOPMENT archive is for local validation only and may show an unknown-publisher warning.

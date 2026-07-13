@@ -24,6 +24,8 @@
           type="button"
           aria-label="Open translation history"
           data-i18n-aria-label="history.open"
+          aria-controls="historyPanel"
+          aria-expanded="false"
         >☰</button>
         <div class="brand-mark" aria-hidden="true">私</div>
         <div>
@@ -40,12 +42,22 @@
           </select>
         </label>
         <span id="profileBadge" class="profile-badge" data-i18n="status.loading">Loading</span>
-        <span class="privacy-badge"><span class="status-dot"></span><span data-i18n="status.no_external">No external transfer</span></span>
+        <span id="privacyBadge" class="privacy-badge" role="status">
+          <span class="status-dot"></span>
+          <span id="privacyBadgeText" data-i18n="privacy.badge.loading">Checking…</span>
+        </span>
       </div>
     </header>
 
     <main class="app-shell">
-      <aside id="historyPanel" class="history-panel" aria-label="Translation history" data-i18n-aria-label="history.aria">
+      <aside
+        id="historyPanel"
+        class="history-panel"
+        aria-label="Translation history"
+        data-i18n-aria-label="history.aria"
+        aria-hidden="false"
+        tabindex="-1"
+      >
         <div class="history-header">
           <div>
             <p class="eyebrow">LOCAL VAULT</p>
@@ -67,6 +79,8 @@
             type="search"
             placeholder="Search source text and translations"
             data-i18n-placeholder="history.search"
+            aria-label="Search translation history"
+            data-i18n-aria-label="history.search_aria"
             autocomplete="off"
           />
         </label>
@@ -149,6 +163,17 @@
             </div>
           </article>
 
+          <div class="action-row">
+            <div class="model-note">
+              <span class="model-note-dot"></span>
+              <span id="modelDescription" data-i18n="model.loading">Loading model information.</span>
+            </div>
+            <button id="translateButton" class="primary-button" type="button">
+              <span class="button-label" data-i18n="translate.button">Translate</span>
+              <span class="button-shortcut">Ctrl ↵</span>
+            </button>
+          </div>
+
           <article class="translation-card output-card">
             <div class="card-header">
               <span data-i18n="output.title">Translation</span>
@@ -182,17 +207,6 @@
 
         <div id="qaPanel" class="qa-panel" hidden></div>
 
-        <div class="action-row">
-          <div class="model-note">
-            <span class="model-note-dot"></span>
-            <span id="modelDescription" data-i18n="model.loading">Loading model information.</span>
-          </div>
-          <button id="translateButton" class="primary-button" type="button">
-            <span class="button-label" data-i18n="translate.button">Translate</span>
-            <span class="button-shortcut">Ctrl ↵</span>
-          </button>
-        </div>
-
         <footer class="privacy-footer">
           <span class="lock-symbol" aria-hidden="true">▣</span>
           <span><strong data-i18n="privacy.footer_label">Local processing:</strong> <span data-i18n="privacy.footer_text">Translation content is never placed in URLs, logs, or analytics.</span></span>
@@ -201,7 +215,8 @@
     </main>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <div id="mobileScrim" class="mobile-scrim"></div>
+    <div id="translationAnnouncer" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+    <div id="mobileScrim" class="mobile-scrim" aria-hidden="true"></div>
     <script src="/i18n.js" defer></script>
     <script src="/app.js" defer></script>
   </body>

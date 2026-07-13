@@ -19,6 +19,12 @@ These are non-negotiable product rules for Private Translator.
 15. Derive the selectable translation-language list from the active model's declared capability instead of pretending that every model supports every language.
 16. Permit internet access for model installation only after an explicit user command, and download only the pinned official artifact described by the embedded trust manifest.
 17. Never send translation text, history, approved assets, vault keys, or device telemetry with a model download request.
+18. Require an unguessable authenticated browser session for every local API request; exact Host and Origin checks are additional boundaries, not substitutes for authentication.
+19. Start managed model engines on unpredictable loopback ports with per-run Bearer secrets, and never silently reuse a process found on a configured port.
+20. Refuse to replace a missing or damaged vault key when encrypted database files already exist; preserving recoverability is more important than appearing to start successfully.
+21. Never place history search text in a URL. Keep it in an authenticated request body.
+22. Do not discard an unsaved result or approved-asset edit without an explicit warning, and do not erase a successful translation merely because history persistence failed.
+23. Require Bearer authentication for every private-network model endpoint, including loopback. If its configured secret is unresolved, disable only that model and reject translation before network access; additionally require HTTPS with a Windows-trusted certificate for every non-loopback private endpoint.
 
 ## Threat boundary
 

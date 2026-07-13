@@ -7,7 +7,7 @@
 
 Private Translator is a Windows-first, offline translation app that feels like a web translator without sending your text to a website. The interface opens in your normal browser, while a small local executable runs the model and stores encrypted history on your PC.
 
-> **v0.1.1 status:** usable and tested on Windows x64, but not code-signed yet. Windows may show an unknown-publisher warning.
+> **Release trust:** v0.1.1 was published before signing became mandatory. The current release tool refuses to create a public archive unless the Lite, Quality, and Install-Model executables all have valid Authenticode signatures and RFC 3161 timestamps. Local unsigned builds are clearly named `UNSIGNED-DEVELOPMENT` and are not release artifacts.
 
 ## What it does
 
@@ -24,20 +24,27 @@ Private Translator is a Windows-first, offline translation app that feels like a
 
 ## Download and run
 
-1. Download `PrivateTranslator-v0.1.1-Windows-x64.zip` from the [latest release](https://github.com/unmatched785/private-translator/releases/latest).
+1. Download `PrivateTranslator-v0.1.2-Windows-x64.zip` from the [latest release](https://github.com/unmatched785/private-translator/releases/latest).
 2. Extract the ZIP to a normal folder. Do not run the executable from inside the archive.
-3. While online, double-click `Install-Model.cmd` once. It downloads about 1.13 GB from a pinned official Hy-MT2 revision, resumes interrupted downloads, and verifies the exact size and SHA-256.
+3. While online, double-click `Install-Model.exe` once. It downloads about 1.13 GB from a pinned official Hy-MT2 revision, resumes interrupted downloads, and verifies the exact size and SHA-256.
 4. Double-click `PrivateTranslator-Lite.exe`.
 5. Keep its console window open while using the browser interface. Closing it also stops the local model server.
 
-The small release archive contains two executables and the pinned `llama.cpp` runtime, but no GGUF model. Both profiles use the one verified model installed at `%LOCALAPPDATA%\PrivateTranslator\models`:
+The small release archive contains two translation launchers, the signed `Install-Model.exe`, and the pinned `llama.cpp` runtime, but no GGUF model. Both profiles use the one verified model installed at `%LOCALAPPDATA%\PrivateTranslator\models`:
 
 | Executable | Intended use | Default model |
 | --- | --- | --- |
 | `PrivateTranslator-Lite.exe` | Everyday laptops; the recommended default | Shared Hy-MT2 1.8B Q4 |
 | `PrivateTranslator-Quality.exe` | The same default model plus an optional private 7B endpoint | Shared Hy-MT2 1.8B Q4 |
 
-Quality never falls back to an internet API. Its optional 7B entry only works after you provide a compatible model server on a permitted private address. v0.1.1 does not install the much larger 7B model.
+Quality never falls back to an internet API. Its optional 7B entry only works after you provide a compatible model server on a permitted private address. Every private-network endpoint, including loopback, must use Bearer authentication. To enable the 7B entry, set the dedicated `PRIVATE_TRANSLATOR_QUALITY_API_KEY` environment variable before launching the app and pass the same secret to the external server with `llama-server --api-key`. Without a non-empty secret, only the 7B entry is marked unavailable; the managed 1.8B model keeps working, and direct 7B API requests are rejected before any network connection. Loopback endpoints at `127.0.0.1` or `::1` may use HTTP. Non-loopback private servers must use an IP-literal HTTPS URL; hostnames and plain HTTP are rejected, and the certificate must contain that address as an IP Subject Alternative Name and chain to an internal CA trusted by Windows. v0.1.2 does not install the much larger 7B model.
+
+```powershell
+$env:PRIVATE_TRANSLATOR_QUALITY_API_KEY = 'one-long-random-secret'
+.\runtime\llama.cpp\llama-server.exe --model "C:\models\Hy-MT2-7B-Q4_K_M.gguf" --alias hy-mt2-7b --host 127.0.0.1 --port 8081 --ctx-size 4096 --api-key $env:PRIVATE_TRANSLATOR_QUALITY_API_KEY
+```
+
+Launch `PrivateTranslator-Quality.exe` from a second PowerShell window where `PRIVATE_TRANSLATOR_QUALITY_API_KEY` has been set to the same value. If the optional server is not needed, launch Quality normally and use its managed 1.8B model.
 
 Recommended environment: Windows 10 or 11 x64, 8 GB system RAM, and a modern x64 CPU. Translation speed depends heavily on CPU and memory bandwidth. After model setup, normal use requires no internet connection. The original [v0.1.0 full offline bundle](https://github.com/unmatched785/private-translator/releases/tag/v0.1.0) remains available for air-gapped transfer.
 
@@ -97,17 +104,29 @@ $env:CARGO_HOME = Join-Path (Get-Location) '.cache\cargo'
 cargo build --locked --release
 ```
 
-Create thin portable folders. The resulting packages intentionally exclude every `.gguf` file:
+Create thin portable folders. The resulting packages intentionally exclude every `.gguf` file and copy only the verified `llama-server` runtime closure. When the pinned development model is present, packaging also performs a real Windows model-loading smoke test:
 
 ```powershell
 .\scripts\package.ps1
 ```
 
-Create the compressed thin release ZIP and SHA-256 sidecar. The release script enforces a 150 MB maximum and rejects bundled GGUF files:
+Create the compressed thin public release ZIP and SHA-256 sidecar. A public release requires a code-signing certificate, SHA-256 Authenticode, and an HTTPS RFC 3161 timestamp service for the Lite, Quality, and Install-Model executables. `Install-Model.exe` is built from the same Rust binary and enters the explicit `setup` path only when launched without arguments under that exact filename. The release gate rejects executable scripts such as CMD, BAT, PowerShell, and VBS files. The upstream `llama-server.exe` remains byte-identical to the pinned llama.cpp release and is verified by size and SHA-256 instead of being re-signed. The archive also includes a CycloneDX SBOM, a Cargo-metadata dependency inventory, and the actual upstream license files for every locked Windows Rust dependency; any missing license fails the release:
 
 ```powershell
+$env:PRIVATE_TRANSLATOR_SIGNING_CERT_THUMBPRINT = '40-HEX-CERTIFICATE-THUMBPRINT'
+$env:PRIVATE_TRANSLATOR_RFC3161_TIMESTAMP_URL = 'https://your-rfc3161-timestamp-service'
+# Optional when signtool.exe is not on PATH:
+$env:PRIVATE_TRANSLATOR_SIGNTOOL = 'C:\Program Files (x86)\Windows Kits\10\bin\...\x64\signtool.exe'
 .\scripts\release.ps1
 ```
+
+For local packaging validation only, create an unmistakably named unsigned artifact:
+
+```powershell
+.\scripts\release.ps1 -UnsignedDevelopment
+```
+
+Never publish an `UNSIGNED-DEVELOPMENT` archive.
 
 For UI work without downloading the model:
 
@@ -130,25 +149,27 @@ Private Translator executable
 
 The application verifies SHA-256 hashes before launching the model server, verifies the model ID returned by that server, serializes work per model, and gives the newest request from each browser tab priority at safe cancellation points.
 
-## Verification performed for v0.1.1
+## Verification performed for v0.1.2
 
-- 28 Rust unit and integration-style tests, including an actual HTTP Range resume, Windows file flush, and final checksum verification
+- 48 Rust unit and integration-style tests, including an actual HTTP Range resume, Windows file flush, and final checksum verification
 - `cargo clippy --all-targets -- -D warnings`
 - JavaScript syntax checks for the app, localization resource, and mock server
 - Real English-to-Korean Hy-MT2 translation
 - A 5,938-character office document translated across two chunks without omission
-- Model and 51 runtime EXE/DLL hashes checked before launch
+- Model and the minimized 23-file `llama-server` runtime closure checked before launch
 - History → approved asset → v2 edit → history deletion with asset preservation
 - Plaintext test content absent from the encrypted database file
 - Managed `llama-server` terminated when the parent app was force-closed
-- Thin release inspection proving that no GGUF model is bundled
+- Thin release inspection proving that no GGUF model or unrelated llama.cpp tool is bundled
+- Full model-loading smoke test against the minimized Windows runtime
+- Cargo-metadata license inventory, copied upstream license texts, and CycloneDX 1.5 SBOM
 - Shared and portable model installation paths with pinned size and SHA-256 verification
 
 Machine-specific speed observations are not a performance guarantee.
 
 ## Project scope
 
-The next priorities are code signing, encrypted backup and restore, terminology suggestions from explicitly approved local assets, stronger multilingual evaluation, and a supported high-quality model pack. TranslateGemma remains a research candidate because its official model requires a dedicated chat template; it is not exposed as a pretend-compatible option in v0.1.
+The next priorities are encrypted backup and restore, terminology suggestions from explicitly approved local assets, stronger multilingual evaluation, and a supported high-quality model pack. TranslateGemma remains a research candidate because its official model requires a dedicated chat template; it is not exposed as a pretend-compatible option in v0.1.
 
 Please read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting a pull request. Report security issues through the private process in [SECURITY.md](SECURITY.md), not a public issue.
 

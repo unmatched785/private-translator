@@ -128,17 +128,16 @@ async fn call_openai_compatible(
         "stream": false
     });
 
-    let response = client
-        .post(&endpoint)
-        .json(&body)
-        .send()
-        .await
-        .with_context(|| {
-            format!(
-                "Could not connect to the translation engine: {}",
-                model.label
-            )
-        })?;
+    let mut request_builder = client.post(&endpoint).json(&body);
+    if let Some(api_key) = &model.runtime_api_key {
+        request_builder = request_builder.bearer_auth(api_key);
+    }
+    let response = request_builder.send().await.with_context(|| {
+        format!(
+            "Could not connect to the translation engine: {}",
+            model.label
+        )
+    })?;
 
     if !response.status().is_success() {
         bail!(
@@ -176,12 +175,14 @@ async fn count_openai_chat_tokens(
         "{}/chat/completions/input_tokens",
         model.endpoint.trim_end_matches('/')
     );
-    let response = client
-        .post(&endpoint)
-        .json(&json!({
-            "model": model.api_model,
-            "messages": [{"role": "user", "content": prompt}]
-        }))
+    let mut request_builder = client.post(&endpoint).json(&json!({
+        "model": model.api_model,
+        "messages": [{"role": "user", "content": prompt}]
+    }));
+    if let Some(api_key) = &model.runtime_api_key {
+        request_builder = request_builder.bearer_auth(api_key);
+    }
+    let response = request_builder
         .send()
         .await
         .context("Could not count model input tokens")?;
@@ -349,6 +350,18 @@ fn default_true() -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    use axum::{
+        Json, Router,
+        extract::State,
+        http::{HeaderMap, Uri, header},
+        routing::post,
+    };
+
     use super::*;
 
     #[test]
@@ -394,5 +407,80 @@ mod tests {
     #[test]
     fn mock_has_a_real_smoke_translation() {
         assert_eq!(mock_translate("Hello", "ko"), "안녕하세요!");
+    }
+
+    #[tokio::test]
+    async fn openai_requests_send_the_runtime_bearer_secret() {
+        async fn engine_stub(
+            State(seen): State<Arc<AtomicUsize>>,
+            headers: HeaderMap,
+            uri: Uri,
+        ) -> Json<serde_json::Value> {
+            assert_eq!(
+                headers.get(header::AUTHORIZATION).unwrap(),
+                "Bearer engine-secret"
+            );
+            seen.fetch_add(1, Ordering::SeqCst);
+            if uri.path().ends_with("/input_tokens") {
+                Json(json!({ "input_tokens": 5 }))
+            } else {
+                Json(json!({
+                    "choices": [{
+                        "message": { "content": "안녕하세요!" },
+                        "finish_reason": "stop"
+                    }]
+                }))
+            }
+        }
+
+        let seen = Arc::new(AtomicUsize::new(0));
+        let app = Router::new()
+            .route("/v1/chat/completions", post(engine_stub))
+            .route("/v1/chat/completions/input_tokens", post(engine_stub))
+            .with_state(Arc::clone(&seen));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        let model = ModelConfig {
+            id: "authenticated".into(),
+            label: "Authenticated engine".into(),
+            description: "test".into(),
+            endpoint: format!("http://{address}/v1"),
+            api_model: "test-model".into(),
+            family: ModelFamily::HyMt2,
+            privacy: PrivacyBoundary::Device,
+            temperature: 0.0,
+            top_p: 1.0,
+            top_k: 20,
+            repeat_penalty: 1.0,
+            context_tokens: 4_096,
+            max_output_tokens: 512,
+            api_key_env: None,
+            runtime_api_key: Some("engine-secret".into()),
+        };
+        let request = TranslateRequest {
+            text: "Hello".into(),
+            source: "en".into(),
+            target: "ko".into(),
+            model: model.id.clone(),
+            mode: "test".into(),
+            save_history: false,
+            client_id: None,
+            request_seq: None,
+        };
+        let client = Client::new();
+
+        assert_eq!(count_prompt_tokens(&client, &model, &request).await, 5);
+        assert_eq!(
+            translate_once(&client, &model, &request, 256)
+                .await
+                .unwrap()
+                .translated_text,
+            "안녕하세요!"
+        );
+        assert_eq!(seen.load(Ordering::SeqCst), 2);
+        server.abort();
     }
 }

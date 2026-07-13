@@ -1,12 +1,12 @@
-Private Translator Quality 0.1.1
+Private Translator Quality 0.1.2
 ===================================
 
 FIRST RUN
-1. Double-click Install-Model.cmd while online to install and verify the shared Hy-MT2 1.8B model (about 1.13 GB).
+1. Double-click Install-Model.exe while online to install and verify the shared Hy-MT2 1.8B model (about 1.13 GB).
 2. Double-click PrivateTranslator-Quality.exe.
 3. Keep the console window open while using the browser interface.
 
-The optional Hy-MT2 7B entry requires a compatible model server on an allowed private address. It never falls back to a cloud translation API. The first Quality release does not include or install a 7B model pack.
+The optional Hy-MT2 7B entry requires a compatible model server on an allowed private address. Every private-network endpoint, including loopback, requires Bearer authentication. To enable 7B, set PRIVATE_TRANSLATOR_QUALITY_API_KEY before launching the app and start the external server with `llama-server --api-key` using the same value. Without a non-empty value, only 7B is unavailable and the managed 1.8B model keeps working; direct 7B requests are rejected before network access. Loopback servers at 127.0.0.1 or ::1 may use HTTP. A non-loopback server must additionally use an IP-literal HTTPS URL; hostnames and plain HTTP are rejected, and its certificate needs a matching IP SAN and a chain to an internal CA trusted by Windows. It never falls back to a cloud translation API. The first Quality release does not include or install a 7B model pack.
 
 MODEL ENDPOINTS
 - Hy-MT2 1.8B: http://127.0.0.1:8080/v1 (managed automatically)
@@ -26,4 +26,4 @@ PRIVACY
 - History and approved translation asset revisions stay in this Windows PC's encrypted vault.
 
 NOTICE
-This release is not code-signed. Windows may show an unknown-publisher warning.
+Official public archives require valid Authenticode signatures and RFC 3161 timestamps on the Lite, Quality, and Install-Model executables. The byte-identical upstream llama-server.exe is verified by pinned size and SHA-256. A folder from an UNSIGNED-DEVELOPMENT archive is for local validation only and may show an unknown-publisher warning.

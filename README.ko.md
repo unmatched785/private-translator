@@ -4,7 +4,7 @@
 
 Private Translator는 웹 번역기처럼 쓰되 원문, 번역문, 기록을 인터넷 사이트로 보내지 않는 Windows 우선 오프라인 번역기입니다. 화면은 평소 쓰는 브라우저에서 열리고, 작은 로컬 실행 파일이 모델과 암호화 기록고를 관리합니다.
 
-> **v0.1.1 상태:** Windows x64에서 실제 모델과 기록 흐름을 검증했지만 아직 코드 서명은 없습니다. Windows가 알 수 없는 게시자 경고를 표시할 수 있습니다.
+> **릴리즈 신뢰 정책:** v0.1.1은 서명 의무화 전에 공개됐습니다. 현재 릴리즈 도구는 Lite·Quality·Install-Model 실행 파일의 Authenticode 서명과 RFC 3161 타임스탬프가 모두 유효하지 않으면 공개용 ZIP을 만들지 않습니다. 로컬 무서명 결과물은 `UNSIGNED-DEVELOPMENT`로 명확히 표시하며 릴리즈로 취급하지 않습니다.
 
 ## 주요 기능
 
@@ -21,9 +21,9 @@ Private Translator는 웹 번역기처럼 쓰되 원문, 번역문, 기록을 �
 
 ## 다운로드와 실행
 
-1. [최신 릴리즈](https://github.com/unmatched785/private-translator/releases/latest)에서 `PrivateTranslator-v0.1.1-Windows-x64.zip`을 받습니다.
+1. [최신 릴리즈](https://github.com/unmatched785/private-translator/releases/latest)에서 `PrivateTranslator-v0.1.2-Windows-x64.zip`을 받습니다.
 2. ZIP을 일반 폴더에 풉니다.
-3. 인터넷에 연결된 상태에서 `Install-Model.cmd`를 한 번 더블클릭합니다. 고정된 공식 Hy-MT2 리비전에서 약 1.13GB를 내려받고, 중단 시 이어받으며 정확한 크기와 SHA-256을 확인합니다.
+3. 인터넷에 연결된 상태에서 `Install-Model.exe`를 한 번 더블클릭합니다. 고정된 공식 Hy-MT2 리비전에서 약 1.13GB를 내려받고, 중단 시 이어받으며 정확한 크기와 SHA-256을 확인합니다.
 4. 보통은 `PrivateTranslator-Lite.exe`를 더블클릭합니다.
 5. 브라우저에서 쓰는 동안 프로그램 창을 열어 둡니다. 창을 닫으면 로컬 모델도 함께 종료됩니다.
 
@@ -34,7 +34,14 @@ Private Translator는 웹 번역기처럼 쓰되 원문, 번역문, 기록을 �
 | `PrivateTranslator-Lite.exe` | 일반 사무용 노트북용 권장 기본판 |
 | `PrivateTranslator-Quality.exe` | 같은 기본 모델에 선택형 개인 7B 서버 항목을 더한 판 |
 
-Quality도 인터넷 번역 API로 자동 전환하지 않습니다. v0.1.1은 용량이 큰 7B 모델을 설치하지 않습니다. Windows 10/11 x64, 시스템 메모리 8GB 이상을 권장합니다. 모델 설치 뒤 평소 번역에는 인터넷이 필요 없습니다. 완전 오프라인 전달용으로 기존 [v0.1.0 전체 묶음](https://github.com/unmatched785/private-translator/releases/tag/v0.1.0)도 그대로 유지합니다.
+Quality도 인터넷 번역 API로 자동 전환하지 않습니다. loopback을 포함한 모든 `private_network` 엔드포인트는 Bearer 인증이 필수입니다. 선택형 7B를 활성화하려면 앱 실행 전에 전용 환경변수 `PRIVATE_TRANSLATOR_QUALITY_API_KEY`를 설정하고 외부 서버에도 `llama-server --api-key`로 똑같은 비밀값을 전달해야 합니다. 값이 없거나 비어 있으면 7B 항목만 사용 불가로 표시되고 관리형 1.8B는 계속 동작하며, 7B 직접 API 요청도 네트워크 연결 전에 거부됩니다. `127.0.0.1` 또는 `::1` loopback 서버만 HTTP를 쓸 수 있습니다. 비-loopback 개인 서버는 호스트명이 아닌 IP 주소를 직접 적은 HTTPS URL만 허용하며, 서버 인증서에는 해당 주소가 IP SAN으로 들어 있고 인증서 체인은 Windows가 신뢰하는 내부 CA로 이어져야 합니다. v0.1.2는 용량이 큰 7B 모델을 설치하지 않습니다. Windows 10/11 x64, 시스템 메모리 8GB 이상을 권장합니다. 모델 설치 뒤 평소 번역에는 인터넷이 필요 없습니다. 완전 오프라인 전달용으로 기존 [v0.1.0 전체 묶음](https://github.com/unmatched785/private-translator/releases/tag/v0.1.0)도 그대로 유지합니다.
+
+```powershell
+$env:PRIVATE_TRANSLATOR_QUALITY_API_KEY = '충분히-긴-임의-비밀값'
+.\runtime\llama.cpp\llama-server.exe --model "C:\models\Hy-MT2-7B-Q4_K_M.gguf" --alias hy-mt2-7b --host 127.0.0.1 --port 8081 --ctx-size 4096 --api-key $env:PRIVATE_TRANSLATOR_QUALITY_API_KEY
+```
+
+두 번째 PowerShell 창에도 `PRIVATE_TRANSLATOR_QUALITY_API_KEY`를 같은 값으로 설정한 뒤 `PrivateTranslator-Quality.exe`를 실행합니다. 선택형 서버를 쓰지 않을 때는 Quality를 평소처럼 실행해 관리형 1.8B 모델을 사용하면 됩니다.
 
 모델 확인과 고급 설치 명령:
 
@@ -75,9 +82,11 @@ Windows x64, Rust stable, PowerShell이 필요합니다. Node.js는 화면 코�
 $env:CARGO_HOME = Join-Path (Get-Location) '.cache\cargo'
 cargo build --locked --release
 .\scripts\package.ps1
+$env:PRIVATE_TRANSLATOR_SIGNING_CERT_THUMBPRINT = '40자리-인증서-지문'
+$env:PRIVATE_TRANSLATOR_RFC3161_TIMESTAMP_URL = 'https://RFC3161-타임스탬프-서비스'
 .\scripts\release.ps1
 ```
 
-`bootstrap.ps1`은 개발·실동작 검증용 고정 모델과 `llama.cpp` 런타임을 내려받고 크기와 SHA-256을 확인합니다. `package.ps1`과 `release.ps1`이 만드는 배포 ZIP은 모든 GGUF를 제외하며 150MB 크기 제한을 적용합니다. 자세한 구조와 개인정보 경계는 [architecture-v1.md](docs/architecture-v1.md), [privacy-contract.md](docs/privacy-contract.md)를 참고하세요.
+`bootstrap.ps1`은 개발·실동작 검증용 고정 모델과 `llama.cpp` 런타임을 내려받고 크기와 SHA-256을 확인합니다. `package.ps1`은 `llama-server`에 필요한 23개 파일만 남기고 실제 모델 로딩까지 검사합니다. `release.ps1`은 공개용 Lite·Quality·Install-Model 실행 파일의 서명과 RFC 3161 타임스탬프, 실행 스크립트와 GGUF 제외, 150MB 제한, Rust 의존성 라이선스 원문, CycloneDX SBOM을 모두 검사합니다. `Install-Model.exe`는 같은 Rust 바이너리이며, 정확한 파일명으로 인수 없이 실행했을 때만 명시적 `setup` 경로로 들어갑니다. upstream `llama-server.exe`는 바이트를 바꾸거나 재서명하지 않고 고정 크기와 SHA-256으로 검증합니다. 인증서가 없는 PC에서 로컬 검증만 할 때는 `.\scripts\release.ps1 -UnsignedDevelopment`를 사용하며, 이 결과물은 공개하면 안 됩니다. 자세한 구조와 개인정보 경계는 [architecture-v1.md](docs/architecture-v1.md), [privacy-contract.md](docs/privacy-contract.md)를 참고하세요.
 
 앱 코드는 [MIT License](LICENSE)입니다. Hy-MT2와 `llama.cpp`는 각 upstream 라이선스를 유지하며 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)에 출처를 적었습니다.

@@ -1,9 +1,15 @@
-use std::{env, fs, net::IpAddr, path::PathBuf};
+use std::{
+    collections::HashSet,
+    env, fs,
+    net::{IpAddr, SocketAddr},
+    path::PathBuf,
+};
 
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AppConfig {
     pub profile: String,
     pub display_name: String,
@@ -17,6 +23,7 @@ pub struct AppConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct LocalEngineConfig {
     pub model_id: String,
     pub runtime_id: String,
@@ -28,7 +35,8 @@ pub struct LocalEngineConfig {
     pub threads: usize,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ModelConfig {
     pub id: String,
     pub label: String,
@@ -47,6 +55,10 @@ pub struct ModelConfig {
     pub context_tokens: usize,
     #[serde(default = "default_max_output_tokens")]
     pub max_output_tokens: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_key_env: Option<String>,
+    #[serde(skip)]
+    pub runtime_api_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -64,7 +76,7 @@ pub enum PrivacyBoundary {
     PrivateNetwork,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct LaunchOptions {
     pub config: AppConfig,
     pub open_browser: bool,
@@ -107,15 +119,29 @@ impl LaunchOptions {
             embedded_profile(&profile)?.to_owned()
         };
 
-        let config: AppConfig =
+        let mut config: AppConfig =
             serde_json::from_str(&raw).context("The configuration JSON is invalid")?;
         config.validate()?;
+        resolve_runtime_api_keys(&mut config, |variable| env::var(variable).ok());
         let open_browser = open_override.unwrap_or(config.auto_open);
 
         Ok(Self {
             config,
             open_browser,
         })
+    }
+}
+
+fn resolve_runtime_api_keys(
+    config: &mut AppConfig,
+    mut read_secret: impl FnMut(&str) -> Option<String>,
+) {
+    for model in &mut config.models {
+        model.runtime_api_key = model
+            .api_key_env
+            .as_deref()
+            .and_then(&mut read_secret)
+            .filter(|secret| !secret.trim().is_empty());
     }
 }
 
@@ -141,6 +167,12 @@ fn profile_from_executable_name(name: &str) -> &'static str {
 
 impl AppConfig {
     pub fn validate(&self) -> Result<()> {
+        if self.profile.trim().is_empty() || self.display_name.trim().is_empty() {
+            bail!("The profile and display name cannot be empty");
+        }
+        if !(1..=1_000_000).contains(&self.max_text_chars) {
+            bail!("max_text_chars must be between 1 and 1000000");
+        }
         if self.models.is_empty() {
             bail!("At least one translation model is required");
         }
@@ -154,11 +186,50 @@ impl AppConfig {
                 self.default_model
             );
         }
-        if !self.bind.starts_with("127.0.0.1:") && !self.bind.starts_with("[::1]:") {
+        let bind = self
+            .bind
+            .parse::<SocketAddr>()
+            .context("The application bind address is invalid")?;
+        if !bind.ip().is_loopback() {
             bail!("The application may bind only to a loopback address");
         }
+        if bind.port() == 80 {
+            bail!(
+                "The application cannot use HTTP's default port because exact Host validation requires an explicit port"
+            );
+        }
+        let mut model_ids = HashSet::with_capacity(self.models.len());
         for model in &self.models {
+            if model.id.trim().is_empty() {
+                bail!("Translation model IDs cannot be empty");
+            }
+            if model.label.trim().is_empty() || model.api_model.trim().is_empty() {
+                bail!(
+                    "Translation model labels and API model IDs cannot be empty: {}",
+                    model.id
+                );
+            }
+            if !model_ids.insert(model.id.as_str()) {
+                bail!("Translation model IDs must be unique: {}", model.id);
+            }
+            if let Some(variable) = &model.api_key_env
+                && (variable.is_empty()
+                    || !variable
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_'))
+            {
+                bail!(
+                    "Model api_key_env must be an environment variable name: {}",
+                    model.id
+                );
+            }
             validate_model_endpoint(model)?;
+            if !model.temperature.is_finite() || !(0.0..=2.0).contains(&model.temperature) {
+                bail!("Model temperature is outside the safe range: {}", model.id);
+            }
+            if !(model.top_p.is_finite() && 0.0 < model.top_p && model.top_p <= 1.0) {
+                bail!("Model top_p is outside the safe range: {}", model.id);
+            }
             if model.top_k < -1 || model.top_k > 10_000 {
                 bail!("Model top_k is outside the safe range: {}", model.id);
             }
@@ -174,7 +245,8 @@ impl AppConfig {
                     model.id
                 );
             }
-            if model.max_output_tokens < 64 || model.max_output_tokens + 128 >= model.context_tokens
+            if model.max_output_tokens < 64
+                || model.max_output_tokens >= model.context_tokens.saturating_sub(128)
             {
                 bail!(
                     "Model max_output_tokens is invalid for context_tokens: {}",
@@ -237,6 +309,12 @@ fn default_max_output_tokens() -> usize {
 }
 
 fn validate_model_endpoint(model: &ModelConfig) -> Result<()> {
+    if model.privacy == PrivacyBoundary::PrivateNetwork && model.api_key_env.is_none() {
+        bail!(
+            "A private_network model requires api_key_env authentication: {}",
+            model.id
+        );
+    }
     if model.family == ModelFamily::Mock {
         return Ok(());
     }
@@ -248,6 +326,16 @@ fn validate_model_endpoint(model: &ModelConfig) -> Result<()> {
     let host = url
         .host_str()
         .with_context(|| format!("The model endpoint has no host: {}", model.id))?;
+    if !url.username().is_empty()
+        || url.password().is_some()
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        bail!(
+            "The model endpoint cannot contain credentials, a query, or a fragment: {}",
+            model.id
+        );
+    }
 
     match model.privacy {
         PrivacyBoundary::Device if !is_loopback_host(host) => {
@@ -258,7 +346,15 @@ fn validate_model_endpoint(model: &ModelConfig) -> Result<()> {
         }
         PrivacyBoundary::PrivateNetwork if !is_private_host(host) => {
             bail!(
-                "A private_network model may use only a private address: {}",
+                "A private_network model must use a private IP address literal: {}",
+                model.id
+            )
+        }
+        PrivacyBoundary::PrivateNetwork
+            if !is_loopback_host(host) && !url.scheme().eq_ignore_ascii_case("https") =>
+        {
+            bail!(
+                "A non-loopback private_network model must use HTTPS: {}",
                 model.id
             )
         }
@@ -274,7 +370,7 @@ fn is_loopback_host(host: &str) -> bool {
 }
 
 fn is_private_host(host: &str) -> bool {
-    if is_loopback_host(host) || host.ends_with(".local") || !host.contains('.') {
+    if is_loopback_host(host) {
         return true;
     }
     host.parse::<IpAddr>().is_ok_and(|address| match address {
@@ -318,6 +414,100 @@ mod tests {
             serde_json::from_str(embedded_profile("lite").unwrap()).unwrap();
         config.models[0].endpoint = "https://external.example/v1".into();
         assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn duplicate_model_ids_are_rejected() {
+        let mut config: AppConfig =
+            serde_json::from_str(embedded_profile("quality").unwrap()).unwrap();
+        config.models[1].id = config.models[0].id.clone();
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn private_network_hostnames_and_plaintext_lan_are_rejected() {
+        let mut config: AppConfig =
+            serde_json::from_str(embedded_profile("quality").unwrap()).unwrap();
+        config.models[1].endpoint = "https://translator-box/v1".into();
+        assert!(config.validate().is_err());
+
+        config.models[1].endpoint = "http://192.168.1.20/v1".into();
+        assert!(config.validate().is_err());
+
+        config.models[1].endpoint = "https://192.168.1.20/v1".into();
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn private_network_loopback_requires_auth_but_managed_device_does_not() {
+        let mut quality: AppConfig =
+            serde_json::from_str(embedded_profile("quality").unwrap()).unwrap();
+        assert_eq!(
+            quality.models[1].api_key_env.as_deref(),
+            Some("PRIVATE_TRANSLATOR_QUALITY_API_KEY")
+        );
+
+        quality.models[1].api_key_env = None;
+        let error = quality.validate().unwrap_err().to_string();
+        assert!(error.contains("private_network model requires api_key_env"));
+
+        let lite: AppConfig = serde_json::from_str(embedded_profile("lite").unwrap()).unwrap();
+        assert_eq!(lite.models[0].privacy, PrivacyBoundary::Device);
+        assert!(lite.models[0].api_key_env.is_none());
+        assert!(lite.validate().is_ok());
+    }
+
+    #[test]
+    fn missing_optional_quality_secret_leaves_only_that_runtime_key_unresolved() {
+        let mut quality: AppConfig =
+            serde_json::from_str(embedded_profile("quality").unwrap()).unwrap();
+
+        resolve_runtime_api_keys(&mut quality, |_| None);
+
+        assert!(quality.validate().is_ok());
+        assert!(quality.models[0].runtime_api_key.is_none());
+        assert!(quality.models[1].runtime_api_key.is_none());
+
+        resolve_runtime_api_keys(&mut quality, |variable| {
+            (variable == "PRIVATE_TRANSLATOR_QUALITY_API_KEY").then(|| "quality-secret".into())
+        });
+        assert_eq!(
+            quality.models[1].runtime_api_key.as_deref(),
+            Some("quality-secret")
+        );
+    }
+
+    #[test]
+    fn unusable_text_and_sampling_limits_are_rejected() {
+        let mut config: AppConfig =
+            serde_json::from_str(embedded_profile("lite").unwrap()).unwrap();
+        config.max_text_chars = 0;
+        assert!(config.validate().is_err());
+
+        config.max_text_chars = 50_000;
+        config.models[0].temperature = -0.1;
+        assert!(config.validate().is_err());
+
+        config.models[0].temperature = 0.7;
+        config.models[0].top_p = 1.1;
+        assert!(config.validate().is_err());
+
+        config.models[0].top_p = 0.6;
+        config.models[0].api_model.clear();
+        assert!(config.validate().is_err());
+
+        config.models[0].api_model = "hy-mt2-1.8b".into();
+        config.models[0].max_output_tokens = usize::MAX;
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn unknown_configuration_fields_are_rejected() {
+        let raw = embedded_profile("lite").unwrap().replace(
+            "\"auto_open\": true",
+            "\"auto_open\": true, \"auto_opne\": true",
+        );
+        assert!(serde_json::from_str::<AppConfig>(&raw).is_err());
     }
 
     #[test]

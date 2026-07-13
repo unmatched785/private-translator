@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use axum::{
     Json, Router,
@@ -25,9 +25,32 @@ pub struct AppState {
     pub config: Arc<AppConfig>,
     pub storage: StorageWorker,
     pub engines: Arc<EngineManager>,
+    pub security: Arc<SecurityContext>,
+}
+
+#[derive(Debug)]
+pub struct SecurityContext {
+    pub token: Arc<str>,
+    pub expected_host: Arc<str>,
+    pub expected_origin: Arc<str>,
+}
+
+impl SecurityContext {
+    pub fn new(
+        token: impl Into<Arc<str>>,
+        expected_host: impl Into<Arc<str>>,
+        expected_origin: impl Into<Arc<str>>,
+    ) -> Self {
+        Self {
+            token: token.into(),
+            expected_host: expected_host.into(),
+            expected_origin: expected_origin.into(),
+        }
+    }
 }
 
 pub fn router(state: AppState) -> Router {
+    let security = Arc::clone(&state.security);
     Router::new()
         .route("/", get(index))
         .route("/i18n.js", get(i18n_js))
@@ -37,6 +60,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/health", get(get_health))
         .route("/api/translate", post(translate))
         .route("/api/history", get(list_history))
+        .route("/api/history/search", post(search_history))
         .route("/api/history/{id}", get(get_history).delete(delete_history))
         .route("/api/history/{id}/favorite", patch(set_favorite))
         .route("/api/history/{id}/approve", post(approve_history))
@@ -47,35 +71,73 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/memory/{id}/revisions", get(list_memory_revisions))
         .fallback(not_found)
-        .layer(middleware::from_fn(local_security))
+        .layer(middleware::from_fn_with_state(security, local_security))
         .with_state(state)
 }
 
-async fn local_security(request: Request<Body>, next: Next) -> Response {
+async fn local_security(
+    State(security): State<Arc<SecurityContext>>,
+    request: Request<Body>,
+    next: Next,
+) -> Response {
     let allowed_host = request
         .headers()
         .get(header::HOST)
         .and_then(|value| value.to_str().ok())
-        .is_some_and(|host| {
-            host.starts_with("127.0.0.1:")
-                || host == "127.0.0.1"
-                || host.starts_with("localhost:")
-                || host == "localhost"
-                || host.starts_with("[::1]:")
-                || host == "[::1]"
-        });
+        .is_some_and(|host| constant_time_equal(host, &security.expected_host));
+    let allowed_origin = request
+        .headers()
+        .get(header::ORIGIN)
+        .and_then(|value| value.to_str().ok())
+        .is_none_or(|origin| constant_time_equal(origin, &security.expected_origin));
+    let is_api = request.uri().path().starts_with("/api/");
+    let authorized = !is_api
+        || request_token(&request).is_some_and(|token| constant_time_equal(token, &security.token));
 
-    let mut response = if allowed_host {
-        next.run(request).await
-    } else {
+    let mut response = if !allowed_host {
         ApiError::not_found(
             "local_only",
-            "This app can only be used from its local address.",
+            "This app can only be used from its exact local address.",
         )
         .into_response()
+    } else if !allowed_origin {
+        ApiError::forbidden(
+            "origin_rejected",
+            "The request did not come from this local app.",
+        )
+        .into_response()
+    } else if !authorized {
+        ApiError::unauthorized(
+            "session_required",
+            "Relaunch Private Translator to open an authenticated local session.",
+        )
+        .into_response()
+    } else {
+        next.run(request).await
     };
     apply_security_headers(&mut response);
     response
+}
+
+fn request_token(request: &Request<Body>) -> Option<&str> {
+    request
+        .headers()
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "))
+}
+
+fn constant_time_equal(left: &str, right: &str) -> bool {
+    if left.len() != right.len() {
+        return false;
+    }
+    left.as_bytes()
+        .iter()
+        .zip(right.as_bytes())
+        .fold(0_u8, |difference, (left, right)| {
+            difference | (left ^ right)
+        })
+        == 0
 }
 
 async fn index() -> impl IntoResponse {
@@ -101,7 +163,8 @@ async fn styles_css() -> impl IntoResponse {
 }
 
 async fn get_config(State(state): State<AppState>) -> Json<PublicConfig> {
-    Json(PublicConfig::from(state.config.as_ref()))
+    let availability = state.engines.availability().await;
+    Json(PublicConfig::new(state.config.as_ref(), &availability))
 }
 
 async fn get_health(State(state): State<AppState>) -> Result<Json<HealthResponse>, ApiError> {
@@ -176,6 +239,7 @@ async fn translate(
         })?;
 
     let mut history_id = None;
+    let mut history_error = None;
     if request.save_history {
         let record = state
             .storage
@@ -191,9 +255,14 @@ async fn translate(
                 latency_ms: engine_result.latency_ms,
                 qa_warnings: engine_result.qa_warnings.clone(),
             })
-            .await
-            .map_err(ApiError::internal)?;
-        history_id = Some(record.id);
+            .await;
+        match record {
+            Ok(record) => history_id = Some(record.id),
+            Err(error) => {
+                eprintln!("history save failed after translation: {error}");
+                history_error = Some("storage_error");
+            }
+        }
     }
 
     Ok(Json(TranslateResponse {
@@ -206,6 +275,7 @@ async fn translate(
         latency_ms: engine_result.latency_ms,
         chunk_count: engine_result.chunk_count,
         history_id,
+        history_error,
         qa_warnings: engine_result.qa_warnings,
     }))
 }
@@ -236,10 +306,30 @@ async fn list_history(
     let records = state
         .storage
         .list(HistoryFilter {
-            query: query.q,
+            query: None,
             favorites_only: query.favorites.unwrap_or(false),
             approved_only: query.approved.unwrap_or(false),
             limit: query.limit.unwrap_or(100),
+        })
+        .await
+        .map_err(ApiError::internal)?;
+    Ok(Json(HistoryListResponse { records }))
+}
+
+async fn search_history(
+    State(state): State<AppState>,
+    Json(request): Json<HistorySearchRequest>,
+) -> Result<Json<HistoryListResponse>, ApiError> {
+    let records = state
+        .storage
+        .list(HistoryFilter {
+            query: request
+                .query
+                .map(|query| query.trim().to_owned())
+                .filter(|query| !query.is_empty()),
+            favorites_only: request.favorites.unwrap_or(false),
+            approved_only: request.approved.unwrap_or(false),
+            limit: request.limit.unwrap_or(100),
         })
         .await
         .map_err(ApiError::internal)?;
@@ -482,14 +572,20 @@ struct PublicConfig {
     models: Vec<PublicModel>,
 }
 
-impl From<&AppConfig> for PublicConfig {
-    fn from(config: &AppConfig) -> Self {
+impl PublicConfig {
+    fn new(config: &AppConfig, availability: &HashMap<String, bool>) -> Self {
         Self {
             profile: config.profile.clone(),
             display_name: config.display_name.clone(),
             default_model: config.default_model.clone(),
             max_text_chars: config.max_text_chars,
-            models: config.models.iter().map(PublicModel::from).collect(),
+            models: config
+                .models
+                .iter()
+                .map(|model| {
+                    PublicModel::new(model, availability.get(&model.id).copied().unwrap_or(false))
+                })
+                .collect(),
         }
     }
 }
@@ -500,16 +596,18 @@ struct PublicModel {
     label: String,
     description: String,
     privacy: String,
+    available: bool,
     supported_languages: Vec<&'static str>,
 }
 
-impl From<&ModelConfig> for PublicModel {
-    fn from(model: &ModelConfig) -> Self {
+impl PublicModel {
+    fn new(model: &ModelConfig, available: bool) -> Self {
         Self {
             id: model.id.clone(),
             label: model.label.clone(),
             description: model.description.clone(),
             privacy: engine::privacy_label(model.privacy).into(),
+            available,
             supported_languages: engine::supported_language_codes(model.family).to_vec(),
         }
     }
@@ -535,12 +633,20 @@ struct TranslateResponse {
     latency_ms: u64,
     chunk_count: usize,
     history_id: Option<String>,
+    history_error: Option<&'static str>,
     qa_warnings: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
 struct HistoryQuery {
-    q: Option<String>,
+    favorites: Option<bool>,
+    approved: Option<bool>,
+    limit: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+struct HistorySearchRequest {
+    query: Option<String>,
     favorites: Option<bool>,
     approved: Option<bool>,
     limit: Option<usize>,
@@ -593,6 +699,22 @@ struct ApiError {
 }
 
 impl ApiError {
+    fn unauthorized(code: &'static str, message: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::UNAUTHORIZED,
+            code,
+            message: message.into(),
+        }
+    }
+
+    fn forbidden(code: &'static str, message: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::FORBIDDEN,
+            code,
+            message: message.into(),
+        }
+    }
+
     fn bad_request(code: &'static str, message: impl Into<String>) -> Self {
         Self {
             status: StatusCode::BAD_REQUEST,
@@ -650,5 +772,158 @@ impl IntoResponse for ApiError {
             .into_response();
         apply_security_headers(&mut response);
         response
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use reqwest::header::{AUTHORIZATION, COOKIE, HOST, ORIGIN};
+
+    use super::*;
+    use crate::{
+        config::{ModelFamily, PrivacyBoundary},
+        crypto::VaultCrypto,
+    };
+
+    fn test_config() -> AppConfig {
+        AppConfig {
+            profile: "test".into(),
+            display_name: "Test".into(),
+            bind: "127.0.0.1:0".into(),
+            default_model: "mock".into(),
+            auto_open: false,
+            max_text_chars: 1_000,
+            local_engine: None,
+            models: vec![ModelConfig {
+                id: "mock".into(),
+                label: "Mock".into(),
+                description: "Test model".into(),
+                endpoint: "mock://local".into(),
+                api_model: "mock".into(),
+                family: ModelFamily::Mock,
+                privacy: PrivacyBoundary::Device,
+                temperature: 0.0,
+                top_p: 1.0,
+                top_k: 20,
+                repeat_penalty: 1.0,
+                context_tokens: 4_096,
+                max_output_tokens: 512,
+                api_key_env: None,
+                runtime_api_key: None,
+            }],
+        }
+    }
+
+    #[tokio::test]
+    async fn api_requires_the_exact_local_session_host_and_origin() {
+        let temporary = tempfile::tempdir().unwrap();
+        let crypto = VaultCrypto::from_key(&[7; 32]).unwrap();
+        let storage = StorageWorker::start(&temporary.path().join("history.db"), crypto).unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let host = address.to_string();
+        let origin = format!("http://{host}");
+        let config = Arc::new(test_config());
+        let state = AppState {
+            engines: Arc::new(EngineManager::new(config.as_ref(), reqwest::Client::new())),
+            config,
+            storage,
+            security: Arc::new(SecurityContext::new(
+                "test-session-token",
+                host.as_str(),
+                origin.as_str(),
+            )),
+        };
+        let server = tokio::spawn(async move {
+            axum::serve(listener, router(state)).await.unwrap();
+        });
+        let client = reqwest::Client::new();
+
+        let response = client
+            .get(format!("{origin}/api/health"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        let response = client
+            .get(format!("{origin}/api/health"))
+            .header(COOKIE, "pt_session=test-session-token")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        let response = client
+            .get(format!("{origin}/api/health"))
+            .header(AUTHORIZATION, "Bearer test-session-token")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let response = client
+            .get(format!("{origin}/api/health"))
+            .header(AUTHORIZATION, "Bearer test-session-token")
+            .header(ORIGIN, "http://127.0.0.1:1")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        let response = client
+            .get(format!("{origin}/api/health"))
+            .header(AUTHORIZATION, "Bearer test-session-token")
+            .header(HOST, "attacker.invalid")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn direct_translate_reports_engine_unavailable_for_an_unresolved_private_secret() {
+        let temporary = tempfile::tempdir().unwrap();
+        let crypto = VaultCrypto::from_key(&[8; 32]).unwrap();
+        let storage = StorageWorker::start(&temporary.path().join("history.db"), crypto).unwrap();
+        let mut config = test_config();
+        config.models[0].privacy = PrivacyBoundary::PrivateNetwork;
+        config.models[0].api_key_env = Some("PRIVATE_TRANSLATOR_QUALITY_API_KEY".into());
+        config.models[0].runtime_api_key = None;
+        let config = Arc::new(config);
+        let state = AppState {
+            engines: Arc::new(EngineManager::new(config.as_ref(), reqwest::Client::new())),
+            config,
+            storage,
+            security: Arc::new(SecurityContext::new(
+                "test-session-token",
+                "127.0.0.1:8173",
+                "http://127.0.0.1:8173",
+            )),
+        };
+
+        let result = translate(
+            State(state),
+            Json(TranslateRequest {
+                text: "Hello".into(),
+                source: "en".into(),
+                target: "ko".into(),
+                model: "mock".into(),
+                mode: "test".into(),
+                save_history: false,
+                client_id: None,
+                request_seq: None,
+            }),
+        )
+        .await;
+        let Err(error) = result else {
+            panic!("an unresolved private secret must not reach translation");
+        };
+        assert_eq!(error.status, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(error.code, "engine_unavailable");
     }
 }
