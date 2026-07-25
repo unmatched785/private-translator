@@ -470,7 +470,9 @@ async function loadEngine() {
     await engine.loadModel([file], {
       n_ctx: 2048,
       n_batch: 256,
-      n_threads: Math.max(1, Math.min(4, Math.floor((navigator.hardwareConcurrency || 2) / 2))),
+      n_threads: crossOriginIsolated
+        ? Math.max(1, Math.min(4, Math.floor((navigator.hardwareConcurrency || 2) / 2)))
+        : 1,
       n_gpu_layers: 999,
       flash_attn: true,
       seed: 42,
@@ -561,17 +563,20 @@ async function checkCompatibility() {
   const secureEnough = window.isSecureContext;
   const hasWebGpu = Boolean(navigator.gpu);
   const hasOpfs = Boolean(navigator.storage?.getDirectory);
-  state.compatible = isChrome && secureEnough && hasWebGpu && hasOpfs && crossOriginIsolated;
+  state.compatible = isChrome && secureEnough && hasWebGpu && hasOpfs;
 
   const checks = [
     ["Chrome", isChrome],
+    ["HTTPS", secureEnough],
     ["WebGPU", hasWebGpu],
     ["브라우저 파일 저장", hasOpfs],
-    ["격리 모드", crossOriginIsolated],
+    [crossOriginIsolated ? "멀티스레드 격리" : "단일 스레드 모드", true],
   ];
   const summary = checks.map(([label, ok]) => `${ok ? "✓" : "✕"} ${label}`).join(" · ");
   elements.compatibility.textContent = state.compatible
-    ? `${summary} · 이 기기에서 알파를 실행할 수 있습니다.`
+    ? crossOriginIsolated
+      ? `${summary} · 이 기기에서 알파를 실행할 수 있습니다.`
+      : `${summary} · CPU 전처리는 단일 스레드, 모델 추론은 WebGPU로 실행합니다.`
     : `${summary} · 최신 데스크톱 Chrome과 HTTPS 환경이 필요합니다.`;
   elements.compatibility.dataset.state = state.compatible ? "ready" : "error";
 }
