@@ -72,6 +72,22 @@ export default {
 `.trimStart();
 
 await writeFile(resolve(server, "index.js"), workerSource);
+await writeFile(
+  resolve(output, "wrangler.json"),
+  `${JSON.stringify(
+    {
+      main: "server/index.js",
+      compatibility_date: "2026-07-25",
+      assets: {
+        directory: "client",
+        binding: "ASSETS",
+        run_worker_first: true,
+      },
+    },
+    null,
+    2,
+  )}\n`,
+);
 
 const packageJson = JSON.parse(await readFile(resolve(repositoryRoot, "package.json"), "utf8"));
 await writeFile(
