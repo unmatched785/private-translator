@@ -10,6 +10,8 @@ Private Translator는 웹 번역기처럼 쓰되 원문, 번역문, 기록을 �
 
 `codex/web-pwa-alpha` 브랜치에서는 가장 작은 Chrome 우선 공개 알파를 만들고 있습니다. Extension이 아닌 정적 웹사이트/PWA이며, 한국어 ↔ 영어 직접 번역만 지원합니다.
 
+**공개 알파:** 최신 데스크톱 Chrome에서 [Private Translator Alpha 열기](https://private-translator-alpha.wise-goby-3000.chatgpt.site)
+
 - 정확히 1,133,080,448바이트인 Hy-MT2 Q4 모델을 고정된 공식 리비전에서 별도로 받습니다.
 - 일부만 받은 파일도 브라우저 저장소에 남겨 이어받습니다. 정확한 크기와 SHA-256이 모두 맞아야 모델을 활성화합니다.
 - GGUF를 일반 파일로 보관한 사용자는 다시 다운로드하는 대신 그 파일을 열 수 있습니다.

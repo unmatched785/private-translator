@@ -13,6 +13,8 @@ Private Translator is a Windows-first, offline translation app that feels like a
 
 The `codex/web-pwa-alpha` branch is building the smallest Chrome-first public alpha. It is a static website/PWA, not an extension, and supports only direct Korean ↔ English translation.
 
+**Public alpha:** [Open Private Translator Alpha](https://private-translator-alpha.wise-goby-3000.chatgpt.site) in current desktop Chrome.
+
 - The exact 1,133,080,448-byte Hy-MT2 Q4 model is downloaded separately from a pinned upstream revision.
 - A partial download remains in browser storage and can resume. The model is activated only after its exact size and SHA-256 pass.
 - Users who keep the GGUF outside the browser can open that file again instead of downloading it again.
