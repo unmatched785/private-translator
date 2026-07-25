@@ -1,9 +1,15 @@
 {
-  "name": "private-translator-browser-validation",
+  "name": "private-translator-web-alpha",
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "description": "Isolated browser feasibility validation for Private Translator",
+  "description": "Browser-native Private Translator alpha and validation tools",
+  "scripts": {
+    "alpha:build": "node scripts/build-alpha.mjs",
+    "alpha:serve": "node scripts/serve-alpha.mjs",
+    "alpha:check": "node scripts/check-alpha.mjs",
+    "alpha:sites-build": "node scripts/build-sites-alpha.mjs"
+  },
   "dependencies": {
     "@wllama/wllama": "3.5.1"
   }

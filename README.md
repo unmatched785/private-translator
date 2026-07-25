@@ -9,6 +9,30 @@ Private Translator is a Windows-first, offline translation app that feels like a
 
 > **Release trust:** v0.1.1 was published before signing became mandatory. The current release tool refuses to create a public archive unless the Lite, Quality, and Install-Model executables all have valid Authenticode signatures and RFC 3161 timestamps. Local unsigned builds are clearly named `UNSIGNED-DEVELOPMENT` and are not release artifacts.
 
+## Web/PWA alpha
+
+The `codex/web-pwa-alpha` branch is building the smallest Chrome-first public alpha. It is a static website/PWA, not an extension, and supports only direct Korean ↔ English translation.
+
+- The exact 1,133,080,448-byte Hy-MT2 Q4 model is downloaded separately from a pinned upstream revision.
+- A partial download remains in browser storage and can resume. The model is activated only after its exact size and SHA-256 pass.
+- Users who keep the GGUF outside the browser can open that file again instead of downloading it again.
+- Source text and translation results stay inside the Chrome tab. Model download requests can still expose normal network metadata such as IP address, time, and requested model revision to the file host.
+- Clearing site data can remove the browser copy even when persistent storage was granted. Keeping the GGUF as a normal file is the recovery path.
+- The alpha intentionally has no account, sync, history, glossary, page translation, browser extension, analytics, or cloud fallback.
+
+The only early product questions are whether a person finishes the 1.13GB download, translates their own sentence, and returns to use it again. GitHub release `download_count` and repository traffic are interest signals only; they do **not** prove model installation, translation, or repeat use.
+
+Local development:
+
+```powershell
+npm install
+npm run alpha:check
+npm run alpha:build
+npm run alpha:serve
+```
+
+Open `http://127.0.0.1:8192`. Add `?source=local` only for local validation against `models/Hy-MT2-1.8B-Q4_K_M.gguf`.
+
 ## What it does
 
 - Runs Tencent Hy-MT2 1.8B Q4 locally through `llama.cpp`

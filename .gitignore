@@ -2,6 +2,8 @@
 /.cache/
 /.data/
 /dist/
+/dist-alpha/
+/alpha/dist/
 /models/
 /runtime/
 /node_modules/

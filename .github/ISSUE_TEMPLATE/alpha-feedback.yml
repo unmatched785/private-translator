@@ -1,0 +1,71 @@
+name: Web/PWA alpha feedback
+description: Share your environment and whether the local alpha worked, without sharing translation text
+title: "[Web alpha]: "
+labels: [web-alpha]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Do not paste source text, translated text, screenshots containing private text, or model files.
+        We only need the execution environment and what stage succeeded or failed.
+  - type: dropdown
+    id: operating_system
+    attributes:
+      label: Operating system
+      options:
+        - Windows 11
+        - Windows 10
+        - macOS
+        - Linux
+    validations:
+      required: true
+  - type: input
+    id: chrome
+    attributes:
+      label: Chrome version and device
+      placeholder: Chrome 140, Intel Core i5, 16GB RAM
+    validations:
+      required: true
+  - type: dropdown
+    id: direction
+    attributes:
+      label: Translation direction
+      options:
+        - Korean to English
+        - English to Korean
+        - Both
+    validations:
+      required: true
+  - type: dropdown
+    id: model_source
+    attributes:
+      label: Model source
+      options:
+        - Downloaded in the browser
+        - Opened an existing GGUF file
+        - Could not prepare the model
+    validations:
+      required: true
+  - type: checkboxes
+    id: milestones
+    attributes:
+      label: What worked?
+      options:
+        - label: I completed or resumed the 1.13GB model download.
+        - label: I translated my own non-sensitive test sentence.
+        - label: I returned in a new tab or later session and reused the model.
+  - type: textarea
+    id: details
+    attributes:
+      label: What happened?
+      description: Describe the stage, visible error, and timing only. Do not include source or translated text.
+      placeholder: The model was reused after opening a new tab. Cold load took about 12 seconds.
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I removed source text, translated text, personal information, and other sensitive content.
+          required: true
