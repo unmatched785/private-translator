@@ -8,7 +8,7 @@ Private Translator는 웹 번역기처럼 쓰되 원문, 번역문, 기록을 �
 
 ## 웹/PWA 알파
 
-`codex/web-pwa-alpha` 브랜치에서는 가장 작은 Chrome 우선 공개 알파를 만들고 있습니다. Extension이 아닌 정적 웹사이트/PWA이며, 한국어 ↔ 영어 직접 번역만 지원합니다.
+`codex/web-pwa-alpha` 브랜치에는 가장 작은 Chrome 우선 공개 알파가 있습니다. Extension이 아닌 정적 웹사이트/PWA이며, 한국어 ↔ 영어 직접 번역만 지원합니다.
 
 **공개 알파:** 최신 데스크톱 Chrome에서 [Private Translator Alpha 열기](https://private-translator-alpha.wise-goby-3000.chatgpt.site)
 

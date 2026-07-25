@@ -11,7 +11,7 @@ Private Translator is a Windows-first, offline translation app that feels like a
 
 ## Web/PWA alpha
 
-The `codex/web-pwa-alpha` branch is building the smallest Chrome-first public alpha. It is a static website/PWA, not an extension, and supports only direct Korean ↔ English translation.
+The `codex/web-pwa-alpha` branch contains the smallest Chrome-first public alpha. It is a static website/PWA, not an extension, and supports only direct Korean ↔ English translation.
 
 **Public alpha:** [Open Private Translator Alpha](https://private-translator-alpha.wise-goby-3000.chatgpt.site) in current desktop Chrome.
 
