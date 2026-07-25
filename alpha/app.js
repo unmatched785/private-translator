@@ -15,8 +15,11 @@ const elements = Object.fromEntries(
     "modelBadge",
     "modelSetup",
     "modelSetupCopy",
+    "installActions",
+    "environmentNotice",
     "compatibility",
     "storageStatus",
+    "performanceStatus",
     "downloadProgress",
     "downloadLabel",
     "downloadEta",
@@ -54,13 +57,22 @@ const state = {
   enginePromise: null,
   loadDurationMs: 0,
   busy: false,
+  translating: false,
   pendingTranslation: false,
 };
 
+let bootInteractionDetected = false;
+window.addEventListener("pointerdown", () => {
+  bootInteractionDetected = true;
+}, { capture: true, once: true });
+window.addEventListener("keydown", () => {
+  bootInteractionDetected = true;
+}, { capture: true, once: true });
+
 function formatBytes(bytes, digits = 1) {
   if (!Number.isFinite(bytes)) return "알 수 없음";
-  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(2)}GB`;
-  return `${(bytes / 1024 ** 2).toFixed(digits)}MB`;
+  if (bytes >= 1_000_000_000) return `${(bytes / 1_000_000_000).toFixed(2)}GB`;
+  return `${(bytes / 1_000_000).toFixed(digits)}MB`;
 }
 
 function formatDuration(seconds) {
@@ -86,9 +98,23 @@ function setDownloadProgress(value, label, eta = "") {
 
 function refreshTranslateButton() {
   const hasText = Boolean(elements.sourceText.value.trim());
-  elements.translateButton.textContent = "번역";
+  elements.translateButton.textContent = state.translating ? "번역 중…" : "번역";
   elements.translateButton.disabled = !hasText || state.busy || !state.compatible;
-  elements.clearButton.disabled = !elements.sourceText.value;
+  elements.clearButton.disabled = state.translating || !elements.sourceText.value;
+}
+
+function lockTranslationControls(locked) {
+  elements.sourceText.readOnly = locked;
+  elements.sourceLanguage.disabled = locked;
+  elements.targetLanguage.disabled = locked;
+  elements.swapButton.disabled = locked;
+}
+
+function resetResult(message = "번역 결과가 여기에 표시됩니다.") {
+  elements.translatedText.textContent = message;
+  elements.translatedText.setAttribute("aria-busy", "false");
+  elements.timingLine.textContent = "";
+  elements.copyButton.disabled = true;
 }
 
 function readVerifiedMetadata() {
@@ -156,10 +182,17 @@ function activateModel(file, source) {
   state.activeFile = file;
   state.activeSource = source;
   setBadge(elements.modelBadge, "사용 가능", "ready");
-  setBadge(elements.engineBadge, "열기 전", "ready");
+  setBadge(
+    elements.engineBadge,
+    state.compatible ? "로컬 준비됨" : "환경 확인 필요",
+    state.compatible ? "ready" : "error",
+  );
   elements.modelSetup.classList.add("is-ready");
   elements.modelSetupCopy.textContent =
-    "검증된 Q4 안정 모델이 준비됐습니다. 이제 번역 버튼을 누르면 이 기기에서 실행됩니다.";
+    source === "browser"
+      ? "이 브라우저에 저장된 Q4 안정 모델이 준비됐습니다."
+      : "선택한 Q4 모델 파일을 현재 탭에서 사용합니다. 다음 방문에는 파일을 다시 열어 주세요.";
+  elements.installActions.hidden = true;
   refreshTranslateButton();
   elements.exportButton.hidden = source !== "browser";
 }
@@ -169,10 +202,15 @@ function deactivateModel() {
   state.activeSource = null;
   elements.modelSetup.classList.remove("is-ready");
   elements.modelSetupCopy.textContent =
-    "현재 안정 모델은 1.13GB입니다. 다운로드 전에 크기와 상태를 확인하세요.";
+    "현재 안정 모델을 한 번 설치하면 다음부터 저장된 파일을 다시 사용합니다.";
+  elements.installActions.hidden = false;
   refreshTranslateButton();
   elements.exportButton.hidden = true;
-  setBadge(elements.engineBadge, "모델 필요", "idle");
+  setBadge(
+    elements.engineBadge,
+    state.compatible ? "모델 필요" : "환경 확인 필요",
+    state.compatible ? "idle" : "error",
+  );
 }
 
 async function renderStorageStatus() {
@@ -276,8 +314,8 @@ async function verifyModelFile(file, source) {
     MODEL.bytes,
     `SHA-256 확인 완료 · ${formatMilliseconds(verification.durationMs)}`,
   );
-  elements.installButton.textContent = source === "browser" ? "설치 완료" : "브라우저에도 설치";
-  elements.installButton.disabled = source === "browser";
+  elements.installButton.textContent = source === "browser" ? "설치 완료" : "1.13GB 안정 모델 설치";
+  elements.installButton.disabled = true;
 }
 
 async function openWritableAtOffset(handle, offset) {
@@ -473,7 +511,8 @@ async function loadEngine() {
   if (!state.activeFile) throw new Error("검증된 모델이 없습니다.");
 
   setBadge(elements.engineBadge, "모델 여는 중", "checking");
-  elements.timingLine.textContent = "인터넷 다운로드가 아니라 로컬 모델을 메모리에 올리는 중입니다.";
+  elements.timingLine.textContent =
+    "로컬 모델을 여는 중입니다. 첫 번역은 잠시 걸릴 수 있습니다.";
   const file = state.activeFile;
   const source = state.activeSource;
 
@@ -514,6 +553,9 @@ async function loadEngine() {
       }),
     );
     setBadge(elements.engineBadge, "준비됨", "ready");
+    elements.performanceStatus.textContent =
+      `최근 모델 열기 ${formatMilliseconds(state.loadDurationMs)} · ` +
+      `${new Date().toLocaleString("ko-KR")}`;
     return engine;
   })();
 
@@ -531,6 +573,11 @@ async function loadEngine() {
 async function translate() {
   const text = elements.sourceText.value.trim();
   if (!text || state.busy) return;
+  if (!state.compatible) {
+    elements.environmentNotice.hidden = false;
+    elements.environmentNotice.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    return;
+  }
   if (!state.activeFile) {
     state.pendingTranslation = true;
     elements.translatedText.textContent =
@@ -543,10 +590,15 @@ async function translate() {
     return;
   }
 
+  const sourceLanguage = elements.sourceLanguage.value;
+  const targetLanguage = elements.targetLanguage.value;
   state.pendingTranslation = false;
   state.busy = true;
+  state.translating = true;
+  lockTranslationControls(true);
   refreshTranslateButton();
   elements.translatedText.textContent = "로컬 모델을 준비하고 있습니다…";
+  elements.translatedText.setAttribute("aria-busy", "true");
   elements.copyButton.disabled = true;
 
   try {
@@ -557,11 +609,7 @@ async function translate() {
       messages: [
         {
           role: "user",
-          content: buildPrompt(
-            text,
-            elements.sourceLanguage.value,
-            elements.targetLanguage.value,
-          ),
+          content: buildPrompt(text, sourceLanguage, targetLanguage),
         },
       ],
       temperature: 0.7,
@@ -575,16 +623,21 @@ async function translate() {
     const generationDuration = performance.now() - started;
     const result = response.choices[0]?.message?.content?.trim() || "";
     elements.translatedText.textContent = result || "(빈 결과)";
+    elements.translatedText.setAttribute("aria-busy", "false");
     elements.copyButton.disabled = !result;
-    elements.timingLine.textContent =
-      `로컬 모델 열기 ${formatMilliseconds(state.loadDurationMs)} · ` +
-      `이번 번역 ${formatMilliseconds(generationDuration)} · 원문/결과 네트워크 전송 없음`;
+    elements.timingLine.textContent = "이 기기에서 번역 완료 · 원문/결과 전송 없음";
+    elements.performanceStatus.textContent =
+      `최근 모델 열기 ${formatMilliseconds(state.loadDurationMs)} · ` +
+      `최근 번역 ${formatMilliseconds(generationDuration)}`;
   } catch (error) {
     console.error(error);
+    elements.translatedText.setAttribute("aria-busy", "false");
     elements.translatedText.textContent = `번역 실패: ${error.message}`;
     elements.timingLine.textContent = "민감한 원문을 피드백에 붙이지 말고 실행 환경만 알려 주세요.";
   } finally {
     state.busy = false;
+    state.translating = false;
+    lockTranslationControls(false);
     refreshTranslateButton();
   }
 }
@@ -597,13 +650,15 @@ async function resumePendingTranslation() {
 
 function swapDirection() {
   const source = elements.sourceLanguage.value;
+  const sourceText = elements.sourceText.value;
+  const translatedText = elements.copyButton.disabled ? "" : elements.translatedText.textContent;
   elements.sourceLanguage.value = elements.targetLanguage.value;
   elements.targetLanguage.value = source;
-  if (!elements.copyButton.disabled) {
-    elements.sourceText.value = elements.translatedText.textContent;
-    elements.translatedText.textContent = "번역 결과가 여기에 표시됩니다.";
-    elements.copyButton.disabled = true;
-    elements.timingLine.textContent = "";
+  if (translatedText) {
+    elements.sourceText.value = translatedText;
+    elements.translatedText.textContent = sourceText;
+    elements.copyButton.disabled = !sourceText.trim();
+    elements.timingLine.textContent = "언어와 내용을 서로 바꿨습니다.";
     elements.characterCount.textContent =
       `${elements.sourceText.value.length.toLocaleString("ko-KR")} / 6,000`;
     refreshTranslateButton();
@@ -611,9 +666,18 @@ function swapDirection() {
 }
 
 async function checkCompatibility() {
-  const isChrome = /Chrome\//.test(navigator.userAgent) && !/Edg\//.test(navigator.userAgent);
+  const brands = navigator.userAgentData?.brands ?? [];
+  const hasGoogleChromeBrand = brands.some(({ brand }) => brand === "Google Chrome");
+  const isBrave = Boolean(navigator.brave);
+  const isChrome =
+    !isBrave &&
+    !/Edg\/|OPR\//.test(navigator.userAgent) &&
+    (hasGoogleChromeBrand || /Chrome\//.test(navigator.userAgent));
   const secureEnough = window.isSecureContext;
-  const hasWebGpu = Boolean(navigator.gpu);
+  const webGpuAdapter = isChrome && navigator.gpu
+    ? await navigator.gpu.requestAdapter().catch(() => null)
+    : null;
+  const hasWebGpu = Boolean(webGpuAdapter);
   const hasOpfs = Boolean(navigator.storage?.getDirectory);
   state.compatible = isChrome && secureEnough && hasWebGpu && hasOpfs;
 
@@ -631,6 +695,24 @@ async function checkCompatibility() {
       : `${summary} · CPU 전처리는 단일 스레드, 모델 추론은 WebGPU로 실행합니다.`
     : `${summary} · 최신 데스크톱 Chrome과 HTTPS 환경이 필요합니다.`;
   elements.compatibility.dataset.state = state.compatible ? "ready" : "error";
+
+  if (state.compatible) {
+    elements.environmentNotice.hidden = true;
+  } else {
+    const message = !isChrome
+      ? isBrave
+        ? "Brave가 아니라 최신 데스크톱 Chrome에서 열어 주세요."
+        : "이 알파는 최신 데스크톱 Chrome에서 사용할 수 있습니다."
+      : !secureEnough
+        ? "안전한 HTTPS 주소에서 다시 열어 주세요."
+        : !hasWebGpu
+          ? "이 Chrome 환경에서 WebGPU를 사용할 수 없습니다. 그래픽 가속 상태를 확인해 주세요."
+          : "이 Chrome 환경에서 브라우저 모델 저장소를 사용할 수 없습니다.";
+    elements.environmentNotice.textContent = message;
+    elements.environmentNotice.hidden = false;
+    setBadge(elements.engineBadge, "환경 확인 필요", "error");
+  }
+  refreshTranslateButton();
 }
 
 elements.installButton.addEventListener("click", downloadModel);
@@ -641,11 +723,16 @@ elements.translateButton.addEventListener("click", translate);
 elements.swapButton.addEventListener("click", swapDirection);
 elements.sourceLanguage.addEventListener("change", () => {
   elements.targetLanguage.value = elements.sourceLanguage.value === "ko" ? "en" : "ko";
+  if (!elements.copyButton.disabled) resetResult("언어가 바뀌었습니다. 다시 번역해 주세요.");
 });
 elements.targetLanguage.addEventListener("change", () => {
   elements.sourceLanguage.value = elements.targetLanguage.value === "ko" ? "en" : "ko";
+  if (!elements.copyButton.disabled) resetResult("언어가 바뀌었습니다. 다시 번역해 주세요.");
 });
 elements.sourceText.addEventListener("input", () => {
+  if (!elements.copyButton.disabled && !state.translating) {
+    resetResult("원문이 바뀌었습니다. 다시 번역해 주세요.");
+  }
   elements.characterCount.textContent =
     `${elements.sourceText.value.length.toLocaleString("ko-KR")} / 6,000`;
   refreshTranslateButton();
@@ -659,16 +746,18 @@ elements.sourceText.addEventListener("keydown", (event) => {
 elements.clearButton.addEventListener("click", () => {
   elements.sourceText.value = "";
   elements.characterCount.textContent = "0 / 6,000";
-  elements.translatedText.textContent = "번역 결과가 여기에 표시됩니다.";
-  elements.timingLine.textContent = "";
-  elements.copyButton.disabled = true;
+  resetResult();
   state.pendingTranslation = false;
   refreshTranslateButton();
   elements.sourceText.focus();
 });
 elements.copyButton.addEventListener("click", async () => {
-  await navigator.clipboard.writeText(elements.translatedText.textContent);
-  elements.copyButton.textContent = "복사됨";
+  try {
+    await navigator.clipboard.writeText(elements.translatedText.textContent);
+    elements.copyButton.textContent = "복사됨";
+  } catch {
+    elements.copyButton.textContent = "복사 실패";
+  }
   setTimeout(() => {
     elements.copyButton.textContent = "복사";
   }, 1_200);
@@ -705,9 +794,16 @@ async function boot() {
       }
     })();
     if (lastLoad?.durationMs) {
-      elements.timingLine.textContent =
+      elements.performanceStatus.textContent =
         `마지막 로컬 모델 열기 ${formatMilliseconds(lastLoad.durationMs)} · ` +
         `${new Date(lastLoad.measuredAt).toLocaleString("ko-KR")}`;
+    }
+    if (
+      !bootInteractionDetected &&
+      document.activeElement === document.body &&
+      window.matchMedia("(pointer: fine)").matches
+    ) {
+      elements.sourceText.focus({ preventScroll: true });
     }
   } catch (error) {
     console.error(error);

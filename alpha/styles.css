@@ -94,7 +94,7 @@ footer {
   box-shadow: 0 0 0 4px rgba(105, 227, 165, 0.09);
 }
 
-.intro { padding: 54px 0 26px; }
+.intro { padding: 28px 0 18px; }
 .eyebrow,
 .section-kicker {
   margin: 0 0 9px;
@@ -107,15 +107,15 @@ footer {
 
 h1 {
   margin: 0;
-  font-size: clamp(34px, 6vw, 56px);
+  font-size: clamp(28px, 4vw, 40px);
   line-height: 1.04;
-  letter-spacing: -0.055em;
+  letter-spacing: -0.045em;
 }
 
 .intro > p:last-child {
-  margin: 14px 0 0;
+  margin: 9px 0 0;
   color: #9eaaa3;
-  font-size: 16px;
+  font-size: 14px;
 }
 
 .translator-card,
@@ -159,6 +159,14 @@ button,
 }
 
 button:disabled { cursor: not-allowed; opacity: 0.46; }
+button:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible,
+.file-button:focus-within {
+  outline: 3px solid rgba(105, 227, 165, 0.72);
+  outline-offset: 3px;
+}
 
 .swap-button {
   width: 46px;
@@ -189,6 +197,15 @@ button:disabled { cursor: not-allowed; opacity: 0.46; }
 .status-badge[data-state="paused"] { background: #3b3017; color: #f3cd70; }
 .status-badge[data-state="blocked"],
 .status-badge[data-state="error"] { background: #3d1f24; color: #ff9aa7; }
+
+.environment-notice {
+  padding: 11px 16px;
+  border-bottom: 1px solid #57343a;
+  background: #2c171b;
+  color: #ffb3bd;
+  font-size: 13px;
+  line-height: 1.55;
+}
 
 .translation-grid {
   display: grid;
@@ -279,6 +296,17 @@ output {
   background: #0e1913;
 }
 
+.model-setup.is-ready {
+  padding-block: 14px;
+}
+
+.model-setup.is-ready .section-kicker,
+.model-setup.is-ready .model-install-summary,
+.model-setup.is-ready .download-area,
+.model-setup.is-ready .model-note {
+  display: none;
+}
+
 .model-setup-heading { align-items: flex-start; }
 .model-setup h3 { margin: 0; font-size: 19px; letter-spacing: -0.025em; }
 .model-setup-heading p:last-child {
@@ -289,12 +317,32 @@ output {
   line-height: 1.6;
 }
 
+.model-install-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(220px, auto);
+  gap: 16px;
+  align-items: center;
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px solid #29352f;
+  border-radius: 12px;
+}
+
+.model-install-summary > div {
+  display: grid;
+  gap: 3px;
+}
+
+.model-install-summary span {
+  color: #95a299;
+  font-size: 12px;
+}
+
 .model-track {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
-  margin-top: 18px;
   padding: 14px;
   border: 1px solid #29352f;
   border-radius: 12px;
@@ -338,6 +386,36 @@ progress { width: 100%; height: 10px; accent-color: #69e3a5; }
   color: #7f8d85;
   font-size: 12px;
   line-height: 1.6;
+}
+
+.model-management {
+  margin-top: 14px;
+  border-top: 1px solid #27322d;
+  color: #98a59d;
+  font-size: 12px;
+}
+
+.model-management > summary {
+  padding-top: 14px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.model-management-content {
+  display: grid;
+  gap: 14px;
+  padding-top: 14px;
+}
+
+.model-management-content p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.management-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .technical-panel {
@@ -422,7 +500,9 @@ footer {
   .translation-pane { min-height: 270px; }
   .source-pane { border-right: 0; border-bottom: 1px solid #2a3630; }
   textarea, output { min-height: 150px; }
+  .model-install-summary,
   .model-track { grid-template-columns: minmax(0, 1fr) auto; }
+  .model-install-summary > span:last-child { grid-column: 1 / -1; }
   .technical-content { grid-template-columns: 1fr; gap: 0; }
 }
 
@@ -430,13 +510,15 @@ footer {
   .site-header { min-height: 62px; }
   .brand > span:nth-child(2), .privacy-status { display: none; }
   .header-actions { gap: 12px; }
-  .intro { padding-top: 38px; }
+  .intro { padding-top: 24px; }
   .language-bar { padding: 10px; }
   .translation-pane { padding: 15px; }
   .model-setup { margin: 0 10px 10px; padding: 16px; }
   .model-setup-heading { flex-direction: column; }
   .action-row { display: grid; }
   .action-row > * { width: 100%; }
+  .management-actions { display: grid; }
+  .management-actions > * { width: 100%; }
   .metadata-list { grid-template-columns: 1fr; }
   .metadata-list dd { margin-bottom: 5px; }
 }

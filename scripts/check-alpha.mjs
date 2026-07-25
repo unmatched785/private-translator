@@ -57,6 +57,8 @@ for (const id of [
   "copyButton",
   "engineBadge",
   "modelBadge",
+  "environmentNotice",
+  "performanceStatus",
 ]) {
   if (!indexHtml.includes(`id="${id}"`)) {
     throw new Error(`Translator UI is missing #${id}`);

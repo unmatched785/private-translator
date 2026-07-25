@@ -59,6 +59,7 @@
           </select>
           <span id="engineBadge" class="status-badge engine-badge" data-state="idle">모델 필요</span>
         </div>
+        <div id="environmentNotice" class="environment-notice" role="alert" hidden></div>
 
         <div class="translation-grid">
           <section class="translation-pane source-pane" aria-labelledby="source-label">
@@ -70,7 +71,6 @@
               id="sourceText"
               maxlength="6000"
               placeholder="번역할 텍스트를 입력하거나 붙여넣으세요."
-              autofocus
             ></textarea>
             <div class="pane-footer">
               <span id="characterCount">0 / 6,000</span>
@@ -85,7 +85,9 @@
               <span id="result-label">번역 결과</span>
               <button id="copyButton" class="text-button" type="button" disabled>복사</button>
             </div>
-            <output id="translatedText" aria-live="polite">번역 결과가 여기에 표시됩니다.</output>
+            <output id="translatedText" aria-live="polite" aria-busy="false"
+              >번역 결과가 여기에 표시됩니다.</output
+            >
             <div id="timingLine" class="timing-line"></div>
           </section>
         </div>
@@ -96,48 +98,40 @@
               <p class="section-kicker">최초 한 번</p>
               <h3 id="model-setup-title">로컬 번역 모델 준비</h3>
               <p id="modelSetupCopy">
-                현재 안정 모델은 1.13GB입니다. 다운로드 전에 크기와 상태를 확인하세요.
+                현재 안정 모델을 한 번 설치하면 다음부터 저장된 파일을 다시 사용합니다.
               </p>
             </div>
             <span id="modelBadge" class="status-badge" data-state="checking">확인 중</span>
           </div>
 
-          <div class="model-track" aria-label="모델 전환 상태">
+          <div class="model-install-summary" aria-label="설치할 모델">
             <div>
-              <span class="model-track-label">제품 목표</span>
-              <strong>Hy-MT2 1.25-bit</strong>
-              <small>440.5MB</small>
-            </div>
-            <span class="status-badge" data-state="blocked">STQ WebGPU 대기</span>
-            <div>
-              <span class="model-track-label">현재 안정 · fallback</span>
               <strong>Hy-MT2 Q4</strong>
-              <small>1.13GB</small>
+              <span>현재 안정 모델</span>
             </div>
-            <span class="status-badge" data-state="ready">사용 가능</span>
+            <strong>1.13GB</strong>
+            <span>100Mbps 기준 다운로드 약 2분 + 무결성 확인</span>
           </div>
 
           <div id="downloadArea" class="download-area">
-            <progress id="downloadProgress" max="1133080448" value="0"></progress>
+            <progress
+              id="downloadProgress"
+              max="1133080448"
+              value="0"
+              aria-label="모델 다운로드 진행률"
+            ></progress>
             <div class="progress-line">
               <span id="downloadLabel">브라우저 저장소를 확인하고 있습니다.</span>
               <span id="downloadEta"></span>
             </div>
           </div>
 
-          <div class="action-row">
+          <div id="installActions" class="action-row">
             <button id="installButton" class="primary-button" type="button" disabled>
               1.13GB 안정 모델 설치
             </button>
             <button id="pauseButton" class="secondary-button" type="button" hidden>
               일시중지
-            </button>
-            <label class="secondary-button file-button">
-              기존 Q4 GGUF 열기
-              <input id="modelFileInput" type="file" accept=".gguf,application/octet-stream" />
-            </label>
-            <button id="exportButton" class="secondary-button" type="button" hidden>
-              GGUF 파일로 보관
             </button>
           </div>
 
@@ -145,6 +139,40 @@
             모델 파일 요청에는 일반적인 IP·시간·버전 정보가 보일 수 있지만,
             번역할 원문과 결과는 포함되지 않습니다. 중단한 다운로드는 이어받습니다.
           </p>
+
+          <details id="modelManagement" class="model-management">
+            <summary>모델 관리</summary>
+            <div class="model-management-content">
+              <div class="model-track" aria-label="모델 전환 상태">
+                <div>
+                  <span class="model-track-label">제품 목표</span>
+                  <strong>Hy-MT2 1.25-bit</strong>
+                  <small>440.5MiB</small>
+                </div>
+                <span class="status-badge" data-state="checking">준비 중</span>
+                <div>
+                  <span class="model-track-label">현재 안정 · fallback</span>
+                  <strong>Hy-MT2 Q4</strong>
+                  <small>1.13GB</small>
+                </div>
+                <span class="status-badge" data-state="ready">사용 가능</span>
+              </div>
+
+              <div class="management-actions">
+                <label class="secondary-button file-button">
+                  저장해 둔 모델 열기
+                  <input id="modelFileInput" type="file" accept=".gguf,application/octet-stream" />
+                </label>
+                <button id="exportButton" class="secondary-button" type="button" hidden>
+                  모델 파일로 보관
+                </button>
+              </div>
+              <p>
+                440.5MiB 목표 모델은 브라우저 WebGPU 지원이 검증될 때까지 활성화하지 않습니다.
+                현재 Q4 경로는 그대로 보존됩니다.
+              </p>
+            </div>
+          </details>
         </section>
       </section>
 
@@ -157,6 +185,7 @@
               Chrome과 WebGPU 환경을 확인하고 있습니다.
             </div>
             <div id="storageStatus" class="storage-status">브라우저 저장소 상태 확인 중…</div>
+            <div id="performanceStatus" class="storage-status">아직 실행 측정값이 없습니다.</div>
           </section>
 
           <section>
