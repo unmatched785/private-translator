@@ -1,13 +1,9 @@
 import { LogLevel, Wllama } from "/vendor/wllama/index.js";
+import { APP_CONFIG } from "/config.js";
 import { sha256Stream } from "/sha256.js";
 
-const MODEL = Object.freeze({
-  fileName: "Hy-MT2-1.8B-Q4_K_M.gguf",
-  bytes: 1_133_080_448,
-  revision: "1cd5208700acedef4ef93019b6cfc148b8522d45",
-  sha256: "dc5f44fcf1fa496ee7ad725982c0c8c553a4de00259b53af84c4b89fb0c06699",
-  url: "https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF/resolve/1cd5208700acedef4ef93019b6cfc148b8522d45/Hy-MT2-1.8B-Q4_K_M.gguf?download=true",
-});
+const MODEL = APP_CONFIG.models[APP_CONFIG.activeModelId];
+const PRODUCT_GOAL_MODEL = APP_CONFIG.models[APP_CONFIG.productGoalModelId];
 
 const MODEL_FOLDER = "private-translator";
 const MODEL_METADATA_KEY = "private-translator.model.v1";
@@ -17,6 +13,8 @@ const isLocalModelSource = new URLSearchParams(location.search).get("source") ==
 const elements = Object.fromEntries(
   [
     "modelBadge",
+    "modelSetup",
+    "modelSetupCopy",
     "compatibility",
     "storageStatus",
     "downloadProgress",
@@ -31,11 +29,19 @@ const elements = Object.fromEntries(
     "targetLanguage",
     "swapButton",
     "sourceText",
+    "clearButton",
     "characterCount",
     "translateButton",
     "copyButton",
     "translatedText",
     "timingLine",
+    "feedbackLink",
+    "repositoryLink",
+    "modelRepository",
+    "modelRevision",
+    "modelBytes",
+    "modelSha256",
+    "modelLicense",
   ].map((id) => [id, document.querySelector(`#${id}`)]),
 );
 
@@ -48,6 +54,7 @@ const state = {
   enginePromise: null,
   loadDurationMs: 0,
   busy: false,
+  pendingTranslation: false,
 };
 
 function formatBytes(bytes, digits = 1) {
@@ -75,6 +82,13 @@ function setDownloadProgress(value, label, eta = "") {
   elements.downloadProgress.value = Math.min(value, MODEL.bytes);
   elements.downloadLabel.textContent = label;
   elements.downloadEta.textContent = eta;
+}
+
+function refreshTranslateButton() {
+  const hasText = Boolean(elements.sourceText.value.trim());
+  elements.translateButton.textContent = "번역";
+  elements.translateButton.disabled = !hasText || state.busy || !state.compatible;
+  elements.clearButton.disabled = !elements.sourceText.value;
 }
 
 function readVerifiedMetadata() {
@@ -143,16 +157,20 @@ function activateModel(file, source) {
   state.activeSource = source;
   setBadge(elements.modelBadge, "사용 가능", "ready");
   setBadge(elements.engineBadge, "열기 전", "ready");
-  elements.sourceText.disabled = false;
-  elements.translateButton.disabled = !elements.sourceText.value.trim();
+  elements.modelSetup.classList.add("is-ready");
+  elements.modelSetupCopy.textContent =
+    "검증된 Q4 안정 모델이 준비됐습니다. 이제 번역 버튼을 누르면 이 기기에서 실행됩니다.";
+  refreshTranslateButton();
   elements.exportButton.hidden = source !== "browser";
 }
 
 function deactivateModel() {
   state.activeFile = null;
   state.activeSource = null;
-  elements.sourceText.disabled = true;
-  elements.translateButton.disabled = true;
+  elements.modelSetup.classList.remove("is-ready");
+  elements.modelSetupCopy.textContent =
+    "현재 안정 모델은 1.13GB입니다. 다운로드 전에 크기와 상태를 확인하세요.";
+  refreshTranslateButton();
   elements.exportButton.hidden = true;
   setBadge(elements.engineBadge, "모델 필요", "idle");
 }
@@ -198,7 +216,7 @@ async function inspectCachedModel() {
       ? "완료 파일 확인"
       : fileSize
         ? "다운로드 이어받기"
-        : "1.13GB 모델 설치";
+        : "1.13GB 안정 모델 설치";
   elements.installButton.disabled = !state.compatible;
 
   if (fileSize > MODEL.bytes) {
@@ -272,6 +290,7 @@ async function openWritableAtOffset(handle, offset) {
 async function downloadModel() {
   if (state.downloadController || state.busy) return;
   state.busy = true;
+  refreshTranslateButton();
   await requestPersistentStorage();
 
   const directory = await getModelDirectory();
@@ -298,8 +317,10 @@ async function downloadModel() {
       elements.installButton.disabled = !state.compatible;
     } finally {
       state.busy = false;
+      refreshTranslateButton();
       await renderStorageStatus();
     }
+    await resumePendingTranslation();
     return;
   }
 
@@ -314,7 +335,7 @@ async function downloadModel() {
   const initialOffset = offset;
 
   try {
-    const modelUrl = isLocalModelSource ? "/model/Hy-MT2-1.8B-Q4_K_M.gguf" : MODEL.url;
+    const modelUrl = isLocalModelSource ? MODEL.localUrl : MODEL.url;
     const headers = offset ? { Range: `bytes=${offset}-` } : {};
     let response = await fetch(modelUrl, {
       headers,
@@ -399,12 +420,14 @@ async function downloadModel() {
     elements.pauseButton.hidden = true;
     if (!state.activeFile) elements.installButton.disabled = !state.compatible;
     await renderStorageStatus();
+    await resumePendingTranslation();
   }
 }
 
 async function useExistingFile(file) {
   if (state.busy || !file) return;
   state.busy = true;
+  refreshTranslateButton();
   elements.modelFileInput.disabled = true;
   try {
     await verifyModelFile(file, "file");
@@ -417,6 +440,7 @@ async function useExistingFile(file) {
     state.busy = false;
     elements.modelFileInput.disabled = false;
     elements.modelFileInput.value = "";
+    await resumePendingTranslation();
   }
 }
 
@@ -507,8 +531,21 @@ async function loadEngine() {
 async function translate() {
   const text = elements.sourceText.value.trim();
   if (!text || state.busy) return;
+  if (!state.activeFile) {
+    state.pendingTranslation = true;
+    elements.translatedText.textContent =
+      "번역할 텍스트는 준비됐습니다. 아래에서 1.13GB 안정 모델을 한 번 설치해 주세요.";
+    elements.timingLine.textContent =
+      "440MB 목표 모델은 STQ WebGPU 지원 전까지 활성화하지 않습니다.";
+    elements.modelSetup.scrollIntoView({ behavior: "smooth", block: "center" });
+    elements.installButton.textContent = "1.13GB 모델 받고 번역";
+    elements.installButton.focus({ preventScroll: true });
+    return;
+  }
+
+  state.pendingTranslation = false;
   state.busy = true;
-  elements.translateButton.disabled = true;
+  refreshTranslateButton();
   elements.translatedText.textContent = "로컬 모델을 준비하고 있습니다…";
   elements.copyButton.disabled = true;
 
@@ -548,14 +585,29 @@ async function translate() {
     elements.timingLine.textContent = "민감한 원문을 피드백에 붙이지 말고 실행 환경만 알려 주세요.";
   } finally {
     state.busy = false;
-    elements.translateButton.disabled = !state.activeFile || !elements.sourceText.value.trim();
+    refreshTranslateButton();
   }
+}
+
+async function resumePendingTranslation() {
+  if (!state.pendingTranslation || !state.activeFile || state.busy) return;
+  state.pendingTranslation = false;
+  await translate();
 }
 
 function swapDirection() {
   const source = elements.sourceLanguage.value;
   elements.sourceLanguage.value = elements.targetLanguage.value;
   elements.targetLanguage.value = source;
+  if (!elements.copyButton.disabled) {
+    elements.sourceText.value = elements.translatedText.textContent;
+    elements.translatedText.textContent = "번역 결과가 여기에 표시됩니다.";
+    elements.copyButton.disabled = true;
+    elements.timingLine.textContent = "";
+    elements.characterCount.textContent =
+      `${elements.sourceText.value.length.toLocaleString("ko-KR")} / 6,000`;
+    refreshTranslateButton();
+  }
 }
 
 async function checkCompatibility() {
@@ -596,7 +648,23 @@ elements.targetLanguage.addEventListener("change", () => {
 elements.sourceText.addEventListener("input", () => {
   elements.characterCount.textContent =
     `${elements.sourceText.value.length.toLocaleString("ko-KR")} / 6,000`;
-  elements.translateButton.disabled = !state.activeFile || !elements.sourceText.value.trim() || state.busy;
+  refreshTranslateButton();
+});
+elements.sourceText.addEventListener("keydown", (event) => {
+  if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+    event.preventDefault();
+    translate();
+  }
+});
+elements.clearButton.addEventListener("click", () => {
+  elements.sourceText.value = "";
+  elements.characterCount.textContent = "0 / 6,000";
+  elements.translatedText.textContent = "번역 결과가 여기에 표시됩니다.";
+  elements.timingLine.textContent = "";
+  elements.copyButton.disabled = true;
+  state.pendingTranslation = false;
+  refreshTranslateButton();
+  elements.sourceText.focus();
 });
 elements.copyButton.addEventListener("click", async () => {
   await navigator.clipboard.writeText(elements.translatedText.textContent);
@@ -616,6 +684,16 @@ async function boot() {
   }
 
   try {
+    elements.feedbackLink.href = APP_CONFIG.links.feedback;
+    elements.repositoryLink.href = APP_CONFIG.links.repository;
+    elements.modelRepository.textContent = MODEL.repository;
+    elements.modelRevision.textContent = MODEL.revision;
+    elements.modelBytes.textContent = `${MODEL.bytes.toLocaleString("en-US")} bytes`;
+    elements.modelSha256.textContent = MODEL.sha256;
+    elements.modelLicense.textContent = MODEL.license;
+    elements.downloadProgress.max = MODEL.bytes;
+    elements.modelSetup.dataset.productGoal = PRODUCT_GOAL_MODEL.id;
+    refreshTranslateButton();
     await checkCompatibility();
     await renderStorageStatus();
     await inspectCachedModel();

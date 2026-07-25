@@ -9,6 +9,21 @@
     "license": "Apache-2.0",
     "integrity": "pass"
   },
+  "ggufInspection": {
+    "version": 3,
+    "architecture": "hunyuan-dense",
+    "tokenizerModel": "gpt2",
+    "tokenizerPre": "hunyuan-dense",
+    "tensorCount": 354,
+    "tensorTypeCounts": {
+      "0": 129,
+      "14": 1,
+      "42": 224
+    },
+    "quantizationName": "HyMT2 1.8B 2bit Stride16",
+    "fileType": 41,
+    "firstUnsupportedTensor": "blk.0.attn_k.weight"
+  },
   "nativeRuntime": {
     "name": "llama.cpp",
     "version": "9966 (c749cb041)",
@@ -19,6 +34,7 @@
     "browser": "Chrome 150",
     "name": "@wllama/wllama",
     "version": "3.5.1",
+    "embeddedLlamaCpp": "b9640-dd4623a",
     "crossOriginIsolated": true,
     "webGpu": true,
     "downloadAndCacheMs": 4993,
@@ -26,9 +42,25 @@
     "error": "tensor 'blk.0.attn_k.weight' has invalid ggml type 42. should be in [0, 42)",
     "terminalError": "RuntimeError: (ABORT)"
   },
+  "upstreamDependency": {
+    "repository": "ggml-org/llama.cpp",
+    "pullRequest": 22836,
+    "status": "open",
+    "addsType": "GGML_TYPE_STQ1_0 = 42",
+    "newTypeCount": 43,
+    "cpuKernel": true,
+    "webGpuKernel": false,
+    "narrowAppOnlyFixAvailable": false
+  },
   "qualityBenchmark": {
     "result": "not_run",
     "reason": "The model cannot be loaded by the product's current native or browser runtime."
   },
-  "verdict": "not_compatible_with_current_runtime"
+  "productPolicy": {
+    "targetModel": "Hy-MT2-1.8B-1.25Bit.gguf",
+    "currentStableModel": "Hy-MT2-1.8B-Q4_K_M.gguf",
+    "fallbackModel": "Hy-MT2-1.8B-Q4_K_M.gguf",
+    "switchAllowed": false
+  },
+  "verdict": "blocked_pending_stq1_0_webgpu_runtime"
 }

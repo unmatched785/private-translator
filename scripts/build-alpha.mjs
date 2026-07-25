@@ -6,10 +6,25 @@ const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const source = resolve(repositoryRoot, "alpha");
 const output = resolve(repositoryRoot, "dist-alpha");
 const wllama = resolve(repositoryRoot, "node_modules", "@wllama", "wllama", "esm");
+const assets = [
+  "_headers",
+  "app.js",
+  "config.js",
+  "icon-192.png",
+  "icon-512.png",
+  "index.html",
+  "manifest.webmanifest",
+  "og.png",
+  "sha256.js",
+  "styles.css",
+  "sw.js",
+];
 
 await rm(output, { recursive: true, force: true });
 await mkdir(resolve(output, "vendor", "wllama", "wasm"), { recursive: true });
-await cp(source, output, { recursive: true });
+for (const asset of assets) {
+  await cp(resolve(source, asset), resolve(output, asset));
+}
 await cp(resolve(wllama, "index.js"), resolve(output, "vendor", "wllama", "index.js"));
 await cp(
   resolve(wllama, "wasm", "wllama.wasm"),

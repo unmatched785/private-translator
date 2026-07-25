@@ -29,154 +29,169 @@
         <span>Private Translator</span>
         <span class="alpha-tag">ALPHA</span>
       </a>
-      <a
-        class="feedback-link"
-        href="https://github.com/unmatched785/private-translator/issues/new?template=alpha-feedback.yml"
-        target="_blank"
-        rel="noreferrer"
-      >
-        피드백
-      </a>
+      <nav class="header-actions" aria-label="프로젝트 링크">
+        <span class="privacy-status"><span aria-hidden="true"></span>번역문 전송 없음</span>
+        <a id="feedbackLink" class="feedback-link" target="_blank" rel="noreferrer">피드백</a>
+      </nav>
     </header>
 
     <main>
-      <section class="hero">
+      <section class="intro" aria-labelledby="page-title">
         <p class="eyebrow">Chrome · 한국어 ↔ 영어</p>
-        <h1>문장을 보내지 않는<br />번역기</h1>
-        <p class="hero-copy">
-          번역 모델을 한 번 설치하면 입력과 결과는 이 기기 안에서만 처리됩니다.
-          계정도, 번역 서버도, 기록도 없습니다.
-        </p>
-        <div class="truth-row" aria-label="개인정보 처리 요약">
-          <span>원문 전송 없음</span>
-          <span>결과 저장 없음</span>
-          <span>오픈소스</span>
-        </div>
+        <h1 id="page-title">내 기기에서 바로 번역</h1>
+        <p>원문과 번역 결과는 번역 서버로 전송되지 않습니다.</p>
       </section>
 
-      <section class="panel setup-panel" aria-labelledby="setup-title">
-        <div class="panel-heading">
-          <div>
-            <p class="step-label">1 · 로컬 엔진</p>
-            <h2 id="setup-title">고품질 모델 준비</h2>
-          </div>
-          <span id="modelBadge" class="status-badge" data-state="checking">확인 중</span>
-        </div>
+      <section class="translator-card" aria-labelledby="translator-title">
+        <h2 id="translator-title" class="visually-hidden">한국어 영어 번역기</h2>
 
-        <div id="compatibility" class="compatibility" aria-live="polite">
-          Chrome과 WebGPU 환경을 확인하고 있습니다.
-        </div>
-
-        <div class="model-summary">
-          <div>
-            <strong>Hy-MT2 1.8B Q4</strong>
-            <span>1.13GB · 최초 한 번 · 보통 1~4분</span>
-          </div>
-          <div class="model-version">고정 버전</div>
-        </div>
-
-        <div id="storageStatus" class="storage-status">브라우저 저장소 상태 확인 중…</div>
-
-        <div id="downloadArea" class="download-area">
-          <progress id="downloadProgress" max="1133080448" value="0"></progress>
-          <div class="progress-line">
-            <span id="downloadLabel">아직 다운로드하지 않았습니다.</span>
-            <span id="downloadEta"></span>
-          </div>
-        </div>
-
-        <div class="action-row">
-          <button id="installButton" class="primary-button" type="button" disabled>
-            1.13GB 모델 설치
-          </button>
-          <button id="pauseButton" class="secondary-button" type="button" hidden>
-            일시중지
-          </button>
-          <label class="secondary-button file-button">
-            기존 GGUF 열기
-            <input id="modelFileInput" type="file" accept=".gguf,application/octet-stream" />
-          </label>
-          <button id="exportButton" class="secondary-button" type="button" hidden>
-            모델 파일로 보관
-          </button>
-        </div>
-
-        <p class="fine-print">
-          다운로드 요청에는 IP와 모델 버전이 보일 수 있지만 번역할 문장은 포함되지 않습니다.
-          중단한 다운로드는 같은 브라우저에서 이어받습니다.
-        </p>
-
-        <details>
-          <summary>모델 출처와 무결성</summary>
-          <dl class="metadata-list">
-            <dt>출처</dt>
-            <dd>tencent/Hy-MT2-1.8B-GGUF</dd>
-            <dt>리비전</dt>
-            <dd><code>1cd5208700acedef4ef93019b6cfc148b8522d45</code></dd>
-            <dt>파일 크기</dt>
-            <dd>1,133,080,448 bytes</dd>
-            <dt>SHA-256</dt>
-            <dd>
-              <code>dc5f44fcf1fa496ee7ad725982c0c8c553a4de00259b53af84c4b89fb0c06699</code>
-            </dd>
-            <dt>라이선스</dt>
-            <dd>Apache-2.0</dd>
-          </dl>
-        </details>
-      </section>
-
-      <section class="panel translator-panel" aria-labelledby="translator-title">
-        <div class="panel-heading">
-          <div>
-            <p class="step-label">2 · 번역</p>
-            <h2 id="translator-title">내 기기에서 번역</h2>
-          </div>
-          <span id="engineBadge" class="status-badge" data-state="idle">모델 필요</span>
-        </div>
-
-        <div class="direction-row">
+        <div class="language-bar">
           <select id="sourceLanguage" aria-label="원문 언어">
             <option value="ko">한국어</option>
             <option value="en">English</option>
           </select>
           <button id="swapButton" class="swap-button" type="button" aria-label="번역 방향 바꾸기">
-            ⇄
+            <span aria-hidden="true">⇄</span>
           </button>
           <select id="targetLanguage" aria-label="번역 언어">
             <option value="en">English</option>
             <option value="ko">한국어</option>
           </select>
+          <span id="engineBadge" class="status-badge engine-badge" data-state="idle">모델 필요</span>
         </div>
 
-        <label for="sourceText">원문</label>
-        <textarea
-          id="sourceText"
-          maxlength="6000"
-          placeholder="번역할 문장을 붙여넣으세요."
-          disabled
-        ></textarea>
-        <div class="translate-row">
-          <span id="characterCount">0 / 6,000</span>
-          <button id="translateButton" class="primary-button" type="button" disabled>
-            번역
-          </button>
+        <div class="translation-grid">
+          <section class="translation-pane source-pane" aria-labelledby="source-label">
+            <div class="pane-heading">
+              <span id="source-label">원문</span>
+              <button id="clearButton" class="text-button" type="button" disabled>지우기</button>
+            </div>
+            <textarea
+              id="sourceText"
+              maxlength="6000"
+              placeholder="번역할 텍스트를 입력하거나 붙여넣으세요."
+              autofocus
+            ></textarea>
+            <div class="pane-footer">
+              <span id="characterCount">0 / 6,000</span>
+              <button id="translateButton" class="primary-button translate-button" type="button" disabled>
+                번역
+              </button>
+            </div>
+          </section>
+
+          <section class="translation-pane result-pane" aria-labelledby="result-label">
+            <div class="pane-heading">
+              <span id="result-label">번역 결과</span>
+              <button id="copyButton" class="text-button" type="button" disabled>복사</button>
+            </div>
+            <output id="translatedText" aria-live="polite">번역 결과가 여기에 표시됩니다.</output>
+            <div id="timingLine" class="timing-line"></div>
+          </section>
         </div>
 
-        <div class="result-block">
-          <div class="result-heading">
-            <span>번역 결과</span>
-            <button id="copyButton" class="text-button" type="button" disabled>복사</button>
+        <section id="modelSetup" class="model-setup" aria-labelledby="model-setup-title">
+          <div class="model-setup-heading">
+            <div>
+              <p class="section-kicker">최초 한 번</p>
+              <h3 id="model-setup-title">로컬 번역 모델 준비</h3>
+              <p id="modelSetupCopy">
+                현재 안정 모델은 1.13GB입니다. 다운로드 전에 크기와 상태를 확인하세요.
+              </p>
+            </div>
+            <span id="modelBadge" class="status-badge" data-state="checking">확인 중</span>
           </div>
-          <output id="translatedText" aria-live="polite">모델을 준비하면 여기에서 번역할 수 있습니다.</output>
-          <div id="timingLine" class="timing-line"></div>
-        </div>
+
+          <div class="model-track" aria-label="모델 전환 상태">
+            <div>
+              <span class="model-track-label">제품 목표</span>
+              <strong>Hy-MT2 1.25-bit</strong>
+              <small>440.5MB</small>
+            </div>
+            <span class="status-badge" data-state="blocked">STQ WebGPU 대기</span>
+            <div>
+              <span class="model-track-label">현재 안정 · fallback</span>
+              <strong>Hy-MT2 Q4</strong>
+              <small>1.13GB</small>
+            </div>
+            <span class="status-badge" data-state="ready">사용 가능</span>
+          </div>
+
+          <div id="downloadArea" class="download-area">
+            <progress id="downloadProgress" max="1133080448" value="0"></progress>
+            <div class="progress-line">
+              <span id="downloadLabel">브라우저 저장소를 확인하고 있습니다.</span>
+              <span id="downloadEta"></span>
+            </div>
+          </div>
+
+          <div class="action-row">
+            <button id="installButton" class="primary-button" type="button" disabled>
+              1.13GB 안정 모델 설치
+            </button>
+            <button id="pauseButton" class="secondary-button" type="button" hidden>
+              일시중지
+            </button>
+            <label class="secondary-button file-button">
+              기존 Q4 GGUF 열기
+              <input id="modelFileInput" type="file" accept=".gguf,application/octet-stream" />
+            </label>
+            <button id="exportButton" class="secondary-button" type="button" hidden>
+              GGUF 파일로 보관
+            </button>
+          </div>
+
+          <p class="model-note">
+            모델 파일 요청에는 일반적인 IP·시간·버전 정보가 보일 수 있지만,
+            번역할 원문과 결과는 포함되지 않습니다. 중단한 다운로드는 이어받습니다.
+          </p>
+        </section>
       </section>
 
+      <details class="technical-panel">
+        <summary>기술 정보 및 진단</summary>
+        <div class="technical-content">
+          <section>
+            <h2>실행 환경</h2>
+            <div id="compatibility" class="compatibility" aria-live="polite">
+              Chrome과 WebGPU 환경을 확인하고 있습니다.
+            </div>
+            <div id="storageStatus" class="storage-status">브라우저 저장소 상태 확인 중…</div>
+          </section>
+
+          <section>
+            <h2>440MB 전환 상태</h2>
+            <p>
+              공식 440.5MB 파일은 무결성 검증을 통과했지만, 현재 wllama는
+              <code>STQ1_0 (GGML type 42)</code>을 로드하지 못합니다. upstream의 CPU 커널도
+              아직 병합 전이며 WebGPU 커널은 제공되지 않아 기본값으로 활성화하지 않았습니다.
+            </p>
+            <p>이 문제가 해결되고 품질·속도·재시작 검증을 통과할 때까지 Q4를 rollback 경로로 유지합니다.</p>
+          </section>
+
+          <section>
+            <h2>현재 안정 모델</h2>
+            <dl class="metadata-list">
+              <dt>출처</dt>
+              <dd id="modelRepository"></dd>
+              <dt>리비전</dt>
+              <dd><code id="modelRevision"></code></dd>
+              <dt>파일 크기</dt>
+              <dd id="modelBytes"></dd>
+              <dt>SHA-256</dt>
+              <dd><code id="modelSha256"></code></dd>
+              <dt>라이선스</dt>
+              <dd id="modelLicense"></dd>
+            </dl>
+          </section>
+        </div>
+      </details>
+
       <section class="privacy-panel">
-        <h2>정확한 개인정보 경계</h2>
+        <h2>개인정보 경계</h2>
         <p>
-          모델 설치 때만 정적 모델 파일을 받습니다. 설치 후 번역 원문과 결과는 네트워크 요청,
-          URL, 로그, 분석 도구로 보내지 않습니다. 이 알파는 번역 기록도 저장하지 않습니다.
+          모델 설치 후 번역 원문과 결과는 네트워크 요청, URL, 로그, 분석 도구로 보내지지 않으며
+          이 알파는 번역 기록도 저장하지 않습니다.
         </p>
         <p>
           피드백에는 Chrome 버전, 운영체제, 사용 언어만 적어 주세요.
@@ -187,9 +202,7 @@
 
     <footer>
       <span>Private Translator · 공개 프로토알파</span>
-      <a href="https://github.com/unmatched785/private-translator" target="_blank" rel="noreferrer">
-        소스 보기
-      </a>
+      <a id="repositoryLink" target="_blank" rel="noreferrer">소스 보기</a>
     </footer>
 
     <script type="module" src="/app.js"></script>

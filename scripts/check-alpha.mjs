@@ -1,11 +1,13 @@
 import { readFile, stat } from "node:fs/promises";
 import { resolve } from "node:path";
+import { APP_CONFIG } from "../alpha/config.js";
 import { Sha256 } from "../alpha/sha256.js";
 
 const root = resolve(import.meta.dirname, "..");
 const required = [
   "alpha/index.html",
   "alpha/app.js",
+  "alpha/config.js",
   "alpha/icon-192.png",
   "alpha/icon-512.png",
   "alpha/og.png",
@@ -42,4 +44,49 @@ for (const [input, expected] of vectors) {
 
 const manifest = JSON.parse(await readFile(resolve(root, "alpha/manifest.webmanifest"), "utf8"));
 if (manifest.start_url !== "/") throw new Error("Unexpected PWA start_url");
-process.stdout.write("Alpha static and SHA-256 checks passed.\n");
+
+const indexHtml = await readFile(resolve(root, "alpha/index.html"), "utf8");
+for (const id of [
+  "sourceLanguage",
+  "targetLanguage",
+  "swapButton",
+  "sourceText",
+  "clearButton",
+  "translateButton",
+  "translatedText",
+  "copyButton",
+  "engineBadge",
+  "modelBadge",
+]) {
+  if (!indexHtml.includes(`id="${id}"`)) {
+    throw new Error(`Translator UI is missing #${id}`);
+  }
+}
+if (!indexHtml.includes('<details class="technical-panel">')) {
+  throw new Error("Technical diagnostics must remain collapsed below the translator");
+}
+
+const activeModel = APP_CONFIG.models[APP_CONFIG.activeModelId];
+const fallbackModel = APP_CONFIG.models[APP_CONFIG.fallbackModelId];
+const productGoalModel = APP_CONFIG.models[APP_CONFIG.productGoalModelId];
+if (!activeModel || !fallbackModel || !productGoalModel) {
+  throw new Error("Alpha model configuration references an unknown model");
+}
+if (activeModel.runtimeStatus !== "stable") {
+  throw new Error(`Blocked model cannot be active: ${activeModel.id}`);
+}
+if (fallbackModel.runtimeStatus !== "stable") {
+  throw new Error(`Fallback model must be stable: ${fallbackModel.id}`);
+}
+if (productGoalModel.runtimeStatus === "blocked" && productGoalModel.id === activeModel.id) {
+  throw new Error("Blocked 440MB product target cannot become the active model");
+}
+for (const model of Object.values(APP_CONFIG.models)) {
+  if (!Number.isSafeInteger(model.bytes) || model.bytes <= 0) {
+    throw new Error(`Invalid model byte length: ${model.id}`);
+  }
+  if (!/^[a-f0-9]{64}$/.test(model.sha256)) {
+    throw new Error(`Invalid model SHA-256: ${model.id}`);
+  }
+}
+process.stdout.write("Alpha UI, model policy, static assets, and SHA-256 checks passed.\n");

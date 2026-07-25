@@ -11,6 +11,7 @@ const wllama = resolve(repositoryRoot, "node_modules", "@wllama", "wllama", "esm
 const assets = [
   "_headers",
   "app.js",
+  "config.js",
   "icon-192.png",
   "icon-512.png",
   "index.html",

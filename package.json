@@ -8,7 +8,8 @@
     "alpha:build": "node scripts/build-alpha.mjs",
     "alpha:serve": "node scripts/serve-alpha.mjs",
     "alpha:check": "node scripts/check-alpha.mjs",
-    "alpha:sites-build": "node scripts/build-sites-alpha.mjs"
+    "alpha:sites-build": "node scripts/build-sites-alpha.mjs",
+    "alpha:inspect-stq": "node validation/inspect-gguf.mjs models/Hy-MT2-1.8B-1.25Bit.gguf"
   },
   "dependencies": {
     "@wllama/wllama": "3.5.1"

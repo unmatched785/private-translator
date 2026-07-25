@@ -1,8 +1,9 @@
-const CACHE_NAME = "private-translator-alpha-v2";
+const CACHE_NAME = "private-translator-alpha-v3";
 const SHELL = [
   "/",
   "/styles.css",
   "/app.js",
+  "/config.js",
   "/sha256.js",
   "/manifest.webmanifest",
   "/vendor/wllama/index.js",

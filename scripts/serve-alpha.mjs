@@ -6,7 +6,16 @@ import { fileURLToPath } from "node:url";
 
 const repositoryRoot = resolve(fileURLToPath(new URL("../", import.meta.url)));
 const root = resolve(repositoryRoot, "dist-alpha");
-const localModelPath = resolve(repositoryRoot, "models", "Hy-MT2-1.8B-Q4_K_M.gguf");
+const localModelPaths = new Map([
+  [
+    "/model/Hy-MT2-1.8B-Q4_K_M.gguf",
+    resolve(repositoryRoot, "models", "Hy-MT2-1.8B-Q4_K_M.gguf"),
+  ],
+  [
+    "/model/Hy-MT2-1.8B-1.25Bit.gguf",
+    resolve(repositoryRoot, "models", "Hy-MT2-1.8B-1.25Bit.gguf"),
+  ],
+]);
 const port = Number(process.env.ALPHA_PORT ?? 8192);
 const contentTypes = {
   ".css": "text/css; charset=utf-8",
@@ -54,8 +63,8 @@ function parseRange(header, size) {
 createServer(async (request, response) => {
   const url = new URL(request.url ?? "/", `http://${request.headers.host}`);
   let filePath;
-  if (url.pathname === "/model/Hy-MT2-1.8B-Q4_K_M.gguf") {
-    filePath = localModelPath;
+  if (localModelPaths.has(url.pathname)) {
+    filePath = localModelPaths.get(url.pathname);
   } else {
     const relative = decodeURIComponent(url.pathname === "/" ? "index.html" : url.pathname.slice(1));
     const candidate = normalize(join(root, relative));

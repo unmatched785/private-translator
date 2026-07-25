@@ -16,11 +16,18 @@ The `codex/web-pwa-alpha` branch contains the smallest Chrome-first public alpha
 **Public alpha:** [Open Private Translator Alpha](https://private-translator-alpha.wise-goby-3000.chatgpt.site) in current desktop Chrome.
 
 - The exact 1,133,080,448-byte Hy-MT2 Q4 model is downloaded separately from a pinned upstream revision.
+- The product-size target is the official 440.5MiB Hy-MT2 1.25-bit model, but it is not
+  activated yet: its unmerged STQ1_0 tensor type has no wllama WebGPU path. Q4 remains the
+  current stable model and rollback path until browser load, WebGPU, restart, quality, and
+  major-error gates all pass.
 - A partial download remains in browser storage and can resume. The model is activated only after its exact size and SHA-256 pass.
 - Users who keep the GGUF outside the browser can open that file again instead of downloading it again.
 - Source text and translation results stay inside the Chrome tab. Model download requests can still expose normal network metadata such as IP address, time, and requested model revision to the file host.
 - Clearing site data can remove the browser copy even when persistent storage was granted. Keeping the GGUF as a normal file is the recovery path.
 - The alpha intentionally has no account, sync, history, glossary, page translation, browser extension, analytics, or cloud fallback.
+- Runtime and model endpoints are centralized in `alpha/config.js`. The app itself uses
+  root-relative assets and can be deployed on a normal HTTPS static host; see
+  [`docs/web-pwa-hosting.md`](docs/web-pwa-hosting.md).
 
 The only early product questions are whether a person finishes the 1.13GB download, translates their own sentence, and returns to use it again. GitHub release `download_count` and repository traffic are interest signals only; they do **not** prove model installation, translation, or repeat use.
 
@@ -33,7 +40,8 @@ npm run alpha:build
 npm run alpha:serve
 ```
 
-Open `http://127.0.0.1:8192`. Add `?source=local` only for local validation against `models/Hy-MT2-1.8B-Q4_K_M.gguf`.
+Open `http://127.0.0.1:8192`. Add `?source=local` only for local validation against the
+configured active model in `models/`.
 
 ## What it does
 
