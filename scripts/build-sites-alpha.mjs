@@ -26,7 +26,7 @@ await mkdir(resolve(client, "vendor", "wllama", "wasm"), { recursive: true });
 await mkdir(server, { recursive: true });
 
 for (const asset of assets) {
-  await cp(resolve(source, asset), resolve(client, asset));
+  await cp(resolve(source, asset), resolve(client, asset === "index.html" ? "shell.html" : asset));
 }
 await cp(resolve(wllama, "index.js"), resolve(client, "vendor", "wllama", "index.js"));
 await cp(
@@ -48,15 +48,16 @@ const SECURITY_HEADERS = {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    const asset = await env.ASSETS.fetch(request);
+    const isShellRequest =
+      request.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html");
+    const assetRequest = isShellRequest
+      ? new Request(new URL("/shell.html", request.url), request)
+      : request;
+    const asset = await env.ASSETS.fetch(assetRequest);
     const headers = new Headers(asset.headers);
     for (const [name, value] of Object.entries(SECURITY_HEADERS)) headers.set(name, value);
 
-    if (
-      request.method === "GET" &&
-      asset.ok &&
-      (url.pathname === "/" || url.pathname === "/index.html")
-    ) {
+    if (isShellRequest && asset.ok) {
       const body = (await asset.text()).replaceAll('content="/og.png"', \`content="\${url.origin}/og.png"\`);
       headers.delete("content-length");
       return new Response(body, { status: asset.status, statusText: asset.statusText, headers });
