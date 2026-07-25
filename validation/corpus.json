@@ -1,0 +1,194 @@
+[
+  {
+    "id": "ko-en-01",
+    "source": "ko",
+    "target": "en",
+    "category": "conversation",
+    "text": "그건 좀 아닌 것 같은데, 그렇다고 완전히 틀렸다는 뜻은 아니야.",
+    "checks": ["soft disagreement", "does not overstate the second clause"]
+  },
+  {
+    "id": "ko-en-02",
+    "source": "ko",
+    "target": "en",
+    "category": "ellipsis",
+    "text": "어제 그 얘기 꺼냈다가 분위기만 싸해졌어.",
+    "checks": ["implicit subject", "idiomatic social atmosphere"]
+  },
+  {
+    "id": "ko-en-03",
+    "source": "ko",
+    "target": "en",
+    "category": "business",
+    "text": "검토 결과, 이번 분기에는 출시를 미루는 편이 손실을 줄일 가능성이 높습니다.",
+    "checks": ["formal register", "probabilistic claim preserved"]
+  },
+  {
+    "id": "ko-en-04",
+    "source": "ko",
+    "target": "en",
+    "category": "technical",
+    "text": "요청 본문은 로그에 남기지 말고, 실패한 요청의 상태 코드와 처리 시간만 기록하세요.",
+    "checks": ["request body versus metadata", "imperative preserved"]
+  },
+  {
+    "id": "ko-en-05",
+    "source": "ko",
+    "target": "en",
+    "category": "numbers",
+    "text": "할인율은 17.5%이고 최종 가격은 128,900원입니다. 자세한 내용은 https://example.com/sale에서 확인하세요.",
+    "checks": ["17.5%", "128,900", "URL exact"]
+  },
+  {
+    "id": "ko-en-06",
+    "source": "ko",
+    "target": "en",
+    "category": "idiom",
+    "text": "싼 게 비지떡이라지만, 이번 제품은 가격에 비해 꽤 괜찮았다.",
+    "checks": ["idiom conveyed naturally", "contrast preserved"]
+  },
+  {
+    "id": "ko-en-07",
+    "source": "ko",
+    "target": "en",
+    "category": "honorific",
+    "text": "번거로우시겠지만 오늘 안으로 확인해 주시면 감사하겠습니다.",
+    "checks": ["polite request", "deadline preserved"]
+  },
+  {
+    "id": "ko-en-08",
+    "source": "ko",
+    "target": "en",
+    "category": "ambiguity",
+    "text": "민수가 지훈에게 자기가 먼저 가겠다고 말했다.",
+    "checks": ["does not invent which person '자기' refers to", "reported speech"]
+  },
+  {
+    "id": "ko-en-09",
+    "source": "ko",
+    "target": "en",
+    "category": "product",
+    "text": "처음에는 빨라 보이지만 기록이 쌓일수록 검색 결과가 눈에 띄게 느려집니다.",
+    "checks": ["time progression", "search results are subject of slowdown"]
+  },
+  {
+    "id": "ko-en-10",
+    "source": "ko",
+    "target": "en",
+    "category": "tone",
+    "text": "솔직히 기대를 많이 안 했는데, 생각보다 훨씬 잘 만들었더라.",
+    "checks": ["casual tone", "pleasant surprise"]
+  },
+  {
+    "id": "ko-en-11",
+    "source": "ko",
+    "target": "en",
+    "category": "formatting",
+    "text": "필수 조건:\n- 계정 없음\n- 광고 없음\n- 번역문 저장 없음",
+    "checks": ["list structure", "three negations preserved"]
+  },
+  {
+    "id": "ko-en-12",
+    "source": "ko",
+    "target": "en",
+    "category": "metaphor",
+    "text": "지금 기능을 더 붙이는 건 새는 배에 페인트칠하는 것과 다르지 않다.",
+    "checks": ["metaphor preserved", "critical tone"]
+  },
+  {
+    "id": "en-ko-01",
+    "source": "en",
+    "target": "ko",
+    "category": "conversation",
+    "text": "I'm not sold on the idea yet, but I'm willing to hear you out.",
+    "checks": ["not literally about selling", "open-minded contrast"]
+  },
+  {
+    "id": "en-ko-02",
+    "source": "en",
+    "target": "ko",
+    "category": "idiom",
+    "text": "The launch went smoothly, but the support team has been putting out fires ever since.",
+    "checks": ["figurative firefighting", "ongoing aftermath"]
+  },
+  {
+    "id": "en-ko-03",
+    "source": "en",
+    "target": "ko",
+    "category": "business",
+    "text": "Revenue grew by 8%, although the increase was largely offset by higher infrastructure costs.",
+    "checks": ["8%", "offset relationship", "formal register"]
+  },
+  {
+    "id": "en-ko-04",
+    "source": "en",
+    "target": "ko",
+    "category": "technical",
+    "text": "Cache the model after the first download, but fail loudly if its checksum no longer matches.",
+    "checks": ["cache imperative", "fail loudly meaning", "checksum condition"]
+  },
+  {
+    "id": "en-ko-05",
+    "source": "en",
+    "target": "ko",
+    "category": "numbers",
+    "text": "Upload limit: 25 MB. Requests time out after 30 seconds. See https://example.org/docs?v=2.",
+    "checks": ["25 MB", "30 seconds", "URL exact"]
+  },
+  {
+    "id": "en-ko-06",
+    "source": "en",
+    "target": "ko",
+    "category": "pragmatics",
+    "text": "Could you take another look when you get a chance? There's no rush.",
+    "checks": ["polite request", "no urgency"]
+  },
+  {
+    "id": "en-ko-07",
+    "source": "en",
+    "target": "ko",
+    "category": "ambiguity",
+    "text": "Alex told Jordan that their draft needed more work.",
+    "checks": ["does not invent gender", "ownership ambiguity not falsely resolved"]
+  },
+  {
+    "id": "en-ko-08",
+    "source": "en",
+    "target": "ko",
+    "category": "tone",
+    "text": "It technically works, which is about the nicest thing I can say about it.",
+    "checks": ["dry criticism", "not rendered as genuine praise"]
+  },
+  {
+    "id": "en-ko-09",
+    "source": "en",
+    "target": "ko",
+    "category": "product",
+    "text": "Users should be able to try the translator before they are asked to create an account.",
+    "checks": ["sequence of actions", "normative requirement"]
+  },
+  {
+    "id": "en-ko-10",
+    "source": "en",
+    "target": "ko",
+    "category": "phrasal",
+    "text": "We ruled out the quick fix because it would only move the problem somewhere else.",
+    "checks": ["ruled out", "problem displacement"]
+  },
+  {
+    "id": "en-ko-11",
+    "source": "en",
+    "target": "ko",
+    "category": "formatting",
+    "text": "Before release:\n1. Verify the model hash.\n2. Disconnect the network.\n3. Translate the test sentence again.",
+    "checks": ["numbered structure", "ordered sequence"]
+  },
+  {
+    "id": "en-ko-12",
+    "source": "en",
+    "target": "ko",
+    "category": "metaphor",
+    "text": "A polished interface cannot rescue a product that has no reason to exist.",
+    "checks": ["rescue is metaphorical", "strong critical tone"]
+  }
+]

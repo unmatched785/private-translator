@@ -4,6 +4,8 @@
 /dist/
 /models/
 /runtime/
+/node_modules/
 /.codex-remote-attachments/
+*.pid
 *.log
 *.tmp

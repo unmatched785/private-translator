@@ -1,0 +1,571 @@
+{
+  "generatedAt": "2026-07-24T12:37:03.883Z",
+  "endpoint": "http://127.0.0.1:8189/v1",
+  "model": "hy-mt2-1.8b",
+  "settings": {
+    "temperature": 0.7,
+    "topP": 0.6,
+    "topK": 20,
+    "repeatPenalty": 1.05,
+    "seed": 42,
+    "maxTokens": 512
+  },
+  "results": [
+    {
+      "id": "ko-en-01",
+      "source": "ko",
+      "target": "en",
+      "category": "conversation",
+      "text": "그건 좀 아닌 것 같은데, 그렇다고 완전히 틀렸다는 뜻은 아니야.",
+      "checks": [
+        "soft disagreement",
+        "does not overstate the second clause"
+      ],
+      "engine": "Hy-MT2-1.8B-Q4_K_M",
+      "translatedText": "That seems a bit off, but it doesn’t mean it’s completely wrong.",
+      "finishReason": "stop",
+      "elapsedMs": 492,
+      "usage": {
+        "completion_tokens": 19,
+        "prompt_tokens": 53,
+        "total_tokens": 72,
+        "prompt_tokens_details": {
+          "cached_tokens": 52
+        }
+      }
+    },
+    {
+      "id": "ko-en-02",
+      "source": "ko",
+      "target": "en",
+      "category": "ellipsis",
+      "text": "어제 그 얘기 꺼냈다가 분위기만 싸해졌어.",
+      "checks": [
+        "implicit subject",
+        "idiomatic social atmosphere"
+      ],
+      "engine": "Hy-MT2-1.8B-Q4_K_M",
+      "translatedText": "Yesterday I brought that up, and it just made the atmosphere tense.",
+      "finishReason": "stop",
+      "elapsedMs": 388,
+      "usage": {
+        "completion_tokens": 15,
+        "prompt_tokens": 48,
+        "total_tokens": 63,
+        "prompt_tokens_details": {
+          "cached_tokens": 47
+        }
+      }
+    },
+    {
+      "id": "ko-en-03",
+      "source": "ko",
+      "target": "en",
+      "category": "business",
+      "text": "검토 결과, 이번 분기에는 출시를 미루는 편이 손실을 줄일 가능성이 높습니다.",
+      "checks": [
+        "formal register",
+        "probabilistic claim preserved"
+      ],
+      "engine": "Hy-MT2-1.8B-Q4_K_M",
+      "translatedText": "After review, it is more likely that delaying the launch this quarter will help reduce losses.",
+      "finishReason": "stop",
+      "elapsedMs": 512,
+      "usage": {
+        "completion_tokens": 19,
+        "prompt_tokens": 54,
+        "total_tokens": 73,
+        "prompt_tokens_details": {
+          "cached_tokens": 53
+        }
+      }
+    },
+    {
+      "id": "ko-en-04",
+      "source": "ko",
+      "target": "en",
+      "category": "technical",
+      "text": "요청 본문은 로그에 남기지 말고, 실패한 요청의 상태 코드와 처리 시간만 기록하세요.",
+      "checks": [
+        "request body versus metadata",
+        "imperative preserved"
+      ],
+      "engine": "Hy-MT2-1.8B-Q4_K_M",
+      "translatedText": "The request body should not be recorded in the log, only the status code and processing time of failed requests should be recorded.",
+      "finishReason": "stop",
+      "elapsedMs": 748,
+      "usage": {
+        "completion_tokens": 26,
+        "prompt_tokens": 60,
+        "total_tokens": 86,
+        "prompt_tokens_details": {
+          "cached_tokens": 59
+        }
+      }
+    },
+    {
+      "id": "ko-en-05",
+      "source": "ko",
+      "target": "en",
+      "category": "numbers",
+      "text": "할인율은 17.5%이고 최종 가격은 128,900원입니다. 자세한 내용은 https://example.com/sale에서 확인하세요.",
+      "checks": [
+        "17.5%",
+        "128,900",
+        "URL exact"
+      ],
+      "engine": "Hy-MT2-1.8B-Q4_K_M",
+      "translatedText": "The discount rate is 17.5%, and the final price is 128,900 won. For more details, please check https://example.com/sale.",
+      "finishReason": "stop",
+      "elapsedMs": 886,
+      "usage": {
+        "completion_tokens": 34,
+        "prompt_tokens": 64,
+        "total_tokens": 98,
+        "prompt_tokens_details": {
+          "cached_tokens": 63
+        }
+      }
+    },
+    {
+      "id": "ko-en-06",
+      "source": "ko",
+      "target": "en",
+      "category": "idiom",
+      "text": "싼 게 비지떡이라지만, 이번 제품은 가격에 비해 꽤 괜찮았다.",
+      "checks": [
+        "idiom conveyed naturally",
+        "contrast preserved"
+      ],
+      "engine": "Hy-MT2-1.8B-Q4_K_M",
+      "translatedText": "Though cheap things are hard to come by, this product was quite good for the price.",
+      "finishReason": "stop",
+      "elapsedMs": 510,
+      "usage": {
+        "completion_tokens": 19,
+        "prompt_tokens": 57,
+        "total_tokens": 76,
+        "prompt_tokens_details": {
+          "cached_tokens": 56
+        }
+      }
+    },
+    {
+      "id": "ko-en-07",
+      "source": "ko",
+      "target": "en",
+      "category": "honorific",
+      "text": "번거로우시겠지만 오늘 안으로 확인해 주시면 감사하겠습니다.",
+      "checks": [
+        "polite request",
+        "deadline preserved"
+      ],
+      "engine": "Hy-MT2-1.8B-Q4_K_M",
+      "translatedText": "I would appreciate it if you could check it out by today, even though it’s troublesome.",
+      "finishReason": "stop",
+      "elapsedMs": 550,
+      "usage": {
+        "completion_tokens": 21,
+        "prompt_tokens": 47,
+        "total_tokens": 68,
+        "prompt_tokens_details": {
+          "cached_tokens": 46
+        }
+      }
+    },
+    {
+      "id": "ko-en-08",
+      "source": "ko",
+      "target": "en",
+      "category": "ambiguity",
+      "text": "민수가 지훈에게 자기가 먼저 가겠다고 말했다.",
+      "checks": [
+        "does not invent which person '자기' refers to",
+        "reported speech"
+      ],
+      "engine": "Hy-MT2-1.8B-Q4_K_M",
+      "translatedText": "Minsoo told Jihoon that he would go first.",
+      "finishReason": "stop",
+      "elapsedMs": 362,
+      "usage": {
+        "completion_tokens": 14,
+        "prompt_tokens": 45,
+        "total_tokens": 59,
+        "prompt_tokens_details": {
+          "cached_tokens": 44
+        }
+      }
+    },
+    {
+      "id": "ko-en-09",
+      "source": "ko",
+      "target": "en",
+      "category": "product",
+      "text": "처음에는 빨라 보이지만 기록이 쌓일수록 검색 결과가 눈에 띄게 느려집니다.",
+      "checks": [
+        "time progression",
+        "search results are subject of slowdown"
+      ],
+      "engine": "Hy-MT2-1.8B-Q4_K_M",
+      "translatedText": "At first, it seems fast, but as records accumulate, the search results become noticeably slower.",
+      "finishReason": "stop",
+      "elapsedMs": 515,
+      "usage": {
+        "completion_tokens": 20,
+        "prompt_tokens": 59,
+        "total_tokens": 79,
+        "prompt_tokens_details": {
+          "cached_tokens": 58
+        }
+      }
+    },
+    {
+      "id": "ko-en-10",
+      "source": "ko",
+      "target": "en",
+      "category": "tone",
+      "text": "솔직히 기대를 많이 안 했는데, 생각보다 훨씬 잘 만들었더라.",
+      "checks": [
+        "casual tone",
+        "pleasant surprise"
+      ],
+      "engine": "Hy-MT2-1.8B-Q4_K_M",
+      "translatedText": "Honestly, I wasn’t expecting too much, but it was made much better than I thought.",
+      "finishReason": "stop",
+      "elapsedMs": 531,
+      "usage": {
+        "completion_tokens": 22,
+        "prompt_tokens": 50,
+        "total_tokens": 72,
+        "prompt_tokens_details": {
+          "cached_tokens": 49
+        }
+      }
+    },
+    {
+      "id": "ko-en-11",
+      "source": "ko",
+      "target": "en",
+      "category": "formatting",
+      "text": "필수 조건:\n- 계정 없음\n- 광고 없음\n- 번역문 저장 없음",
+      "checks": [
+        "list structure",
+        "three negations preserved"
+      ],
+      "engine": "Hy-MT2-1.8B-Q4_K_M",
+      "translatedText": "Required conditions:  \n- No account  \n- No ads  \n- No translation files saved",
+      "finishReason": "stop",
+      "elapsedMs": 505,
+      "usage": {
+        "completion_tokens": 20,
+        "prompt_tokens": 52,
+        "total_tokens": 72,
+        "prompt_tokens_details": {
+          "cached_tokens": 51
+        }
+      }
+    },
+    {
+      "id": "ko-en-12",
+      "source": "ko",
+      "target": "en",
+      "category": "metaphor",
+      "text": "지금 기능을 더 붙이는 건 새는 배에 페인트칠하는 것과 다르지 않다.",
+      "checks": [
+        "metaphor preserved",
+        "critical tone"
+      ],
+      "engine": "Hy-MT2-1.8B-Q4_K_M",
+      "translatedText": "Adding more features now is no different from painting a leaky ship.",
+      "finishReason": "stop",
+      "elapsedMs": 375,
+      "usage": {
+        "completion_tokens": 14,
+        "prompt_tokens": 54,
+        "total_tokens": 68,
+        "prompt_tokens_details": {
+          "cached_tokens": 53
+        }
+      }
+    },
+    {
+      "id": "en-ko-01",
+      "source": "en",
+      "target": "ko",
+      "category": "conversation",
+      "text": "I'm not sold on the idea yet, but I'm willing to hear you out.",
+      "checks": [
+        "not literally about selling",
+        "open-minded contrast"
+      ],
+      "engine": "Hy-MT2-1.8B-Q4_K_M",
+      "translatedText": "아직 그 생각에 전적으로 동의하지는 않지만, 당신의 말을 듣고 싶습니다.",
+      "finishReason": "stop",
+      "elapsedMs": 1220,
+      "usage": {
+        "completion_tokens": 25,
+        "prompt_tokens": 44,
+        "total_tokens": 69,
+        "prompt_tokens_details": {
+          "cached_tokens": 43
+        }
+      }
+    },
+    {
+      "id": "en-ko-02",
+      "source": "en",
+      "target": "ko",
+      "category": "idiom",
+      "text": "The launch went smoothly, but the support team has been putting out fires ever since.",
+      "checks": [
+        "figurative firefighting",
+        "ongoing aftermath"
+      ],
+      "engine": "Hy-MT2-1.8B-Q4_K_M",
+      "translatedText": "발사는 순조롭게 진행되었지만, 지원팀은 그 이후로 계속 문제를 해결하고 있습니다.",
+      "finishReason": "stop",
+      "elapsedMs": 963,
+      "usage": {
+        "completion_tokens": 30,
+        "prompt_tokens": 43,
+        "total_tokens": 73,
+        "prompt_tokens_details": {
+          "cached_tokens": 42
+        }
+      }
+    },
+    {
+      "id": "en-ko-03",
+      "source": "en",
+      "target": "ko",
+      "category": "business",
+      "text": "Revenue grew by 8%, although the increase was largely offset by higher infrastructure costs.",
+      "checks": [
+        "8%",
+        "offset relationship",
+        "formal register"
+      ],
+      "engine": "Hy-MT2-1.8B-Q4_K_M",
+      "translatedText": "수익은 8% 증가했지만, 이 증가분은 대부분 인프라 비용 상승으로 상쇄되었습니다.",
+      "finishReason": "stop",
+      "elapsedMs": 938,
+      "usage": {
+        "completion_tokens": 35,
+        "prompt_tokens": 43,
+        "total_tokens": 78,
+        "prompt_tokens_details": {
+          "cached_tokens": 42
+        }
+      }
+    },
+    {
+      "id": "en-ko-04",
+      "source": "en",
+      "target": "ko",
+      "category": "technical",
+      "text": "Cache the model after the first download, but fail loudly if its checksum no longer matches.",
+      "checks": [
+        "cache imperative",
+        "fail loudly meaning",
+        "checksum condition"
+      ],
+      "engine": "Hy-MT2-1.8B-Q4_K_M",
+      "translatedText": "첫 번째 다운로드 후 모델을 캐시하되, 체크섬프가 더 이상 일치하지 않으면 큰 소리로 실패합니다.",
+      "finishReason": "stop",
+      "elapsedMs": 1145,
+      "usage": {
+        "completion_tokens": 42,
+        "prompt_tokens": 44,
+        "total_tokens": 86,
+        "prompt_tokens_details": {
+          "cached_tokens": 25
+        }
+      }
+    },
+    {
+      "id": "en-ko-05",
+      "source": "en",
+      "target": "ko",
+      "category": "numbers",
+      "text": "Upload limit: 25 MB. Requests time out after 30 seconds. See https://example.org/docs?v=2.",
+      "checks": [
+        "25 MB",
+        "30 seconds",
+        "URL exact"
+      ],
+      "engine": "Hy-MT2-1.8B-Q4_K_M",
+      "translatedText": "업로드 제한: 25 MB. 요청은 30초 후에 시간 초과됩니다. https://example.org/docs?v=2를 참조하세요.",
+      "finishReason": "stop",
+      "elapsedMs": 1061,
+      "usage": {
+        "completion_tokens": 38,
+        "prompt_tokens": 51,
+        "total_tokens": 89,
+        "prompt_tokens_details": {
+          "cached_tokens": 25
+        }
+      }
+    },
+    {
+      "id": "en-ko-06",
+      "source": "en",
+      "target": "ko",
+      "category": "pragmatics",
+      "text": "Could you take another look when you get a chance? There's no rush.",
+      "checks": [
+        "polite request",
+        "no urgency"
+      ],
+      "engine": "Hy-MT2-1.8B-Q4_K_M",
+      "translatedText": "기회가 되면 다시 한 번 살펴보세요. 서두를 필요는 없습니다.",
+      "finishReason": "stop",
+      "elapsedMs": 641,
+      "usage": {
+        "completion_tokens": 22,
+        "prompt_tokens": 42,
+        "total_tokens": 64,
+        "prompt_tokens_details": {
+          "cached_tokens": 25
+        }
+      }
+    },
+    {
+      "id": "en-ko-07",
+      "source": "en",
+      "target": "ko",
+      "category": "ambiguity",
+      "text": "Alex told Jordan that their draft needed more work.",
+      "checks": [
+        "does not invent gender",
+        "ownership ambiguity not falsely resolved"
+      ],
+      "engine": "Hy-MT2-1.8B-Q4_K_M",
+      "translatedText": "알렉스는 조던에게 그들의 초안에 더 많은 작업이 필요하다고 말했다.",
+      "finishReason": "stop",
+      "elapsedMs": 728,
+      "usage": {
+        "completion_tokens": 26,
+        "prompt_tokens": 36,
+        "total_tokens": 62,
+        "prompt_tokens_details": {
+          "cached_tokens": 25
+        }
+      }
+    },
+    {
+      "id": "en-ko-08",
+      "source": "en",
+      "target": "ko",
+      "category": "tone",
+      "text": "It technically works, which is about the nicest thing I can say about it.",
+      "checks": [
+        "dry criticism",
+        "not rendered as genuine praise"
+      ],
+      "engine": "Hy-MT2-1.8B-Q4_K_M",
+      "translatedText": "기술적으로는 작동합니다. 이것이 이 제품에 대해 할 수 있는 가장 긍정적인 말입니다.",
+      "finishReason": "stop",
+      "elapsedMs": 675,
+      "usage": {
+        "completion_tokens": 26,
+        "prompt_tokens": 43,
+        "total_tokens": 69,
+        "prompt_tokens_details": {
+          "cached_tokens": 25
+        }
+      }
+    },
+    {
+      "id": "en-ko-09",
+      "source": "en",
+      "target": "ko",
+      "category": "product",
+      "text": "Users should be able to try the translator before they are asked to create an account.",
+      "checks": [
+        "sequence of actions",
+        "normative requirement"
+      ],
+      "engine": "Hy-MT2-1.8B-Q4_K_M",
+      "translatedText": "사용자는 계정을 만들라는 요청 전에 번역기를 시도할 수 있어야 합니다.",
+      "finishReason": "stop",
+      "elapsedMs": 652,
+      "usage": {
+        "completion_tokens": 24,
+        "prompt_tokens": 43,
+        "total_tokens": 67,
+        "prompt_tokens_details": {
+          "cached_tokens": 25
+        }
+      }
+    },
+    {
+      "id": "en-ko-10",
+      "source": "en",
+      "target": "ko",
+      "category": "phrasal",
+      "text": "We ruled out the quick fix because it would only move the problem somewhere else.",
+      "checks": [
+        "ruled out",
+        "problem displacement"
+      ],
+      "engine": "Hy-MT2-1.8B-Q4_K_M",
+      "translatedText": "우리는 즉각적인 해결책을 제외했습니다. 왜냐하면 그건 문제를 다른 곳으로 옮길 뿐이기 때문입니다.",
+      "finishReason": "stop",
+      "elapsedMs": 984,
+      "usage": {
+        "completion_tokens": 37,
+        "prompt_tokens": 42,
+        "total_tokens": 79,
+        "prompt_tokens_details": {
+          "cached_tokens": 25
+        }
+      }
+    },
+    {
+      "id": "en-ko-11",
+      "source": "en",
+      "target": "ko",
+      "category": "formatting",
+      "text": "Before release:\n1. Verify the model hash.\n2. Disconnect the network.\n3. Translate the test sentence again.",
+      "checks": [
+        "numbered structure",
+        "ordered sequence"
+      ],
+      "engine": "Hy-MT2-1.8B-Q4_K_M",
+      "translatedText": "출시 전:\n1. 모델 해시를 확인합니다.\n2. 네트워크를 끊습니다.\n3. 테스트 문장을 다시 번역합니다.",
+      "finishReason": "stop",
+      "elapsedMs": 1057,
+      "usage": {
+        "completion_tokens": 41,
+        "prompt_tokens": 51,
+        "total_tokens": 92,
+        "prompt_tokens_details": {
+          "cached_tokens": 25
+        }
+      }
+    },
+    {
+      "id": "en-ko-12",
+      "source": "en",
+      "target": "ko",
+      "category": "metaphor",
+      "text": "A polished interface cannot rescue a product that has no reason to exist.",
+      "checks": [
+        "rescue is metaphorical",
+        "strong critical tone"
+      ],
+      "engine": "Hy-MT2-1.8B-Q4_K_M",
+      "translatedText": "매끄러운 인터페이스는 존재할 이유가 없는 제품을 구원할 수 없다.",
+      "finishReason": "stop",
+      "elapsedMs": 747,
+      "usage": {
+        "completion_tokens": 27,
+        "prompt_tokens": 40,
+        "total_tokens": 67,
+        "prompt_tokens_details": {
+          "cached_tokens": 25
+        }
+      }
+    }
+  ]
+}

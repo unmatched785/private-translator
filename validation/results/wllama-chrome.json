@@ -1,0 +1,61 @@
+{
+  "testedAt": "2026-07-24T23:34:58+09:00",
+  "browser": {
+    "name": "Chrome",
+    "version": "150.0.0.0",
+    "platform": "Windows",
+    "crossOriginIsolated": true,
+    "webGpu": true,
+    "logicalCpuCount": 16
+  },
+  "runtime": {
+    "name": "@wllama/wllama",
+    "version": "3.5.1",
+    "multithread": true,
+    "threadCount": 4,
+    "gpu": {
+      "vendor": "nvidia",
+      "architecture": "lovelace",
+      "offloadedLayers": 33,
+      "totalLayers": 33,
+      "modelBufferMiB": 1075.74,
+      "kvBufferMiB": 128.0,
+      "computeBufferMiB": 25.01
+    }
+  },
+  "model": {
+    "file": "Hy-MT2-1.8B-Q4_K_M.gguf",
+    "bytes": 1133080448,
+    "architecture": "hunyuan-dense",
+    "parameters": "1.79B",
+    "quantization": "Q4_K_M",
+    "contextUsed": 2048
+  },
+  "firstRun": {
+    "input": "분위기만 싸해졌어.",
+    "output": "The atmosphere just became cooler.",
+    "modelLoadMs": 14950,
+    "generationMs": 374,
+    "totalTokens": 43,
+    "result": "pass"
+  },
+  "offlineRun": {
+    "serverPortClosedBeforeRun": true,
+    "input": "아무리 바빠도 밥은 먹고 다녀.",
+    "output": "No matter how busy you are, you still need to eat and go around.",
+    "modelLoad": "already loaded",
+    "generationMs": 465,
+    "totalTokens": 58,
+    "result": "pass"
+  },
+  "cachePersistenceRun": {
+    "result": "not_retested",
+    "reason": "Chrome automation extension disconnected after the successful offline run"
+  },
+  "verdict": {
+    "browserInference": "pass",
+    "noInferenceServer": "pass",
+    "webGpuOffload": "pass",
+    "persistentCacheAcrossPageReload": "not_retested"
+  }
+}

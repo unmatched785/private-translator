@@ -1,0 +1,10 @@
+{
+  "name": "private-translator-browser-validation",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Isolated browser feasibility validation for Private Translator",
+  "dependencies": {
+    "@wllama/wllama": "3.5.1"
+  }
+}

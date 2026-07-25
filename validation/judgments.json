@@ -1,0 +1,129 @@
+{
+  "rubric": {
+    "2": "Meaning, required details, and tone are preserved well enough for normal use.",
+    "1": "The main meaning survives, but wording, tone, formatting, or one important detail is weakened.",
+    "0": "A major semantic error, literal-idiom failure, or misleading output makes the translation unsafe to trust."
+  },
+  "cases": [
+    {
+      "id": "ko-en-01",
+      "hymt2": [2, "Soft disagreement and qualification are both preserved."],
+      "chrome": [0, "Changes the speaker and says 'I'm completely wrong'."]
+    },
+    {
+      "id": "ko-en-02",
+      "hymt2": [2, "The tense social atmosphere is conveyed naturally."],
+      "chrome": [0, "Translates 싸해졌어 as the atmosphere becoming cheap."]
+    },
+    {
+      "id": "ko-en-03",
+      "hymt2": [2, "Formal tone and probability are preserved."],
+      "chrome": [1, "Meaning mostly survives, but 'the side that delays launches' is unnatural and less precise."]
+    },
+    {
+      "id": "ko-en-04",
+      "hymt2": [2, "Correctly separates request-body logging from failure metadata."],
+      "chrome": [2, "Correctly separates request-body logging from failure metadata."]
+    },
+    {
+      "id": "ko-en-05",
+      "hymt2": [2, "Numbers, currency, and URL are preserved."],
+      "chrome": [2, "Numbers, currency, and URL are preserved."]
+    },
+    {
+      "id": "ko-en-06",
+      "hymt2": [0, "Fails to convey the 싼 게 비지떡 idiom and changes its meaning."],
+      "chrome": [0, "Renders the idiom as 'the cheap ones are expensive'."]
+    },
+    {
+      "id": "ko-en-07",
+      "hymt2": [1, "The request and deadline survive, but 'even though it is troublesome' is awkward and shifts the politeness."],
+      "chrome": [2, "The polite request and deadline are conveyed naturally."]
+    },
+    {
+      "id": "ko-en-08",
+      "hymt2": [2, "The English pronoun leaves the intended person unresolved."],
+      "chrome": [2, "The English pronoun leaves the intended person unresolved."]
+    },
+    {
+      "id": "ko-en-09",
+      "hymt2": [2, "The accumulation of records and search slowdown are preserved."],
+      "chrome": [1, "Changes accumulated records into the user's act of recording."]
+    },
+    {
+      "id": "ko-en-10",
+      "hymt2": [1, "The surprise survives, but 'it was made much better' is unnatural."],
+      "chrome": [2, "The casual surprise is conveyed cleanly."]
+    },
+    {
+      "id": "ko-en-11",
+      "hymt2": [1, "List formatting survives, but 번역문 becomes 'translation files'."],
+      "chrome": [1, "The three conditions survive, but list formatting is flattened."]
+    },
+    {
+      "id": "ko-en-12",
+      "hymt2": [2, "The leaky-ship metaphor and criticism are preserved."],
+      "chrome": [0, "Misreads 새는 배 as a bird's stomach."]
+    },
+    {
+      "id": "en-ko-01",
+      "hymt2": [2, "Not being convinced yet and willingness to listen are preserved."],
+      "chrome": [0, "Treats 'sold on' as being sold out or devoted."]
+    },
+    {
+      "id": "en-ko-02",
+      "hymt2": [2, "Correctly converts figurative firefighting into ongoing problem solving."],
+      "chrome": [0, "Translates the figurative fires as literal fires."]
+    },
+    {
+      "id": "en-ko-03",
+      "hymt2": [2, "The 8% increase and offset relationship are clear."],
+      "chrome": [2, "The 8% increase and offset relationship are clear."]
+    },
+    {
+      "id": "en-ko-04",
+      "hymt2": [0, "Contains a checksum typo and literally translates 'fail loudly' as making a loud sound."],
+      "chrome": [0, "Literally renders 'fail loudly' as failing loudly or greatly."]
+    },
+    {
+      "id": "en-ko-05",
+      "hymt2": [2, "Limits, timeout, and URL are all preserved."],
+      "chrome": [1, "Details survive, but the timeout sentence becomes an awkward noun phrase."]
+    },
+    {
+      "id": "en-ko-06",
+      "hymt2": [2, "The polite request and lack of urgency are natural."],
+      "chrome": [1, "Meaning survives, but the wording is noticeably unnatural."]
+    },
+    {
+      "id": "en-ko-07",
+      "hymt2": [1, "No gender is invented, but 'their draft' is rendered mechanically."],
+      "chrome": [1, "No gender is invented, but draft is transliterated and ownership remains awkward."]
+    },
+    {
+      "id": "en-ko-08",
+      "hymt2": [2, "The dry criticism is conveyed as the most positive thing available to say."],
+      "chrome": [1, "The literal wording weakens the dry, dismissive tone."]
+    },
+    {
+      "id": "en-ko-09",
+      "hymt2": [2, "The required order between trying and account creation is preserved."],
+      "chrome": [2, "The required order between trying and account creation is preserved."]
+    },
+    {
+      "id": "en-ko-10",
+      "hymt2": [2, "Ruling out the fix and merely moving the problem are preserved."],
+      "chrome": [2, "Ruling out the fix and merely moving the problem are preserved."]
+    },
+    {
+      "id": "en-ko-11",
+      "hymt2": [2, "Numbered structure and sequence are preserved."],
+      "chrome": [1, "All steps survive, but the numbered layout is flattened."]
+    },
+    {
+      "id": "en-ko-12",
+      "hymt2": [2, "The metaphorical criticism is strong and natural enough."],
+      "chrome": [1, "Meaning survives, but 'rescue' is rendered too literally."]
+    }
+  ]
+}

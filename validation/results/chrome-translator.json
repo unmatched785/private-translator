@@ -1,0 +1,132 @@
+{
+  "browser": "Chrome 150.0.0.0",
+  "translatorApi": true,
+  "webGpu": true,
+  "crossOriginIsolated": true,
+  "languagePairs": {
+    "ko-en": "available",
+    "en-ko": "available"
+  },
+  "results": [
+    {
+      "id": "ko-en-01",
+      "elapsedMs": 26,
+      "translation": "I don't think that's a bit, but that doesn't mean I'm completely wrong."
+    },
+    {
+      "id": "ko-en-02",
+      "elapsedMs": 10,
+      "translation": "I brought up that story yesterday, but only the atmosphere became cheap."
+    },
+    {
+      "id": "ko-en-03",
+      "elapsedMs": 16,
+      "translation": "As a result of the review, it is more likely that the side that delays launches will reduce losses this quarter."
+    },
+    {
+      "id": "ko-en-04",
+      "elapsedMs": 16,
+      "translation": "Don't leave the request body in the log, just record the status code and processing time of the failed request."
+    },
+    {
+      "id": "ko-en-05",
+      "elapsedMs": 20,
+      "translation": "The discount rate is 17.5%, and the final price is 128,900 won. For more information, check https://example.com/sale."
+    },
+    {
+      "id": "ko-en-06",
+      "elapsedMs": 11,
+      "translation": "The cheap ones are expensive, but this product was pretty good for the price."
+    },
+    {
+      "id": "ko-en-07",
+      "elapsedMs": 12,
+      "translation": "It may be a hassle, but I would appreciate it if you check it out today."
+    },
+    {
+      "id": "ko-en-08",
+      "elapsedMs": 8,
+      "translation": "Minsu told Jihoon that he would go first."
+    },
+    {
+      "id": "ko-en-09",
+      "elapsedMs": 13,
+      "translation": "It looks fast at first, but the more you record, the slower your search results are."
+    },
+    {
+      "id": "ko-en-10",
+      "elapsedMs": 14,
+      "translation": "To be honest, I didn't expect much, but it was much better than I expected."
+    },
+    {
+      "id": "ko-en-11",
+      "elapsedMs": 11,
+      "translation": "Required conditions: - No account - No ads - No translations saved"
+    },
+    {
+      "id": "ko-en-12",
+      "elapsedMs": 12,
+      "translation": "Adding more features now is no different from painting a bird's stomach."
+    },
+    {
+      "id": "en-ko-01",
+      "elapsedMs": 20,
+      "translation": "나는 아직 아이디어에 매진되지 않았지만 당신의 말을 듣고 싶습니다."
+    },
+    {
+      "id": "en-ko-02",
+      "elapsedMs": 15,
+      "translation": "발사는 순조롭게 진행되었지만 지원팀은 그 이후로 화재를 진압하고 있습니다."
+    },
+    {
+      "id": "en-ko-03",
+      "elapsedMs": 14,
+      "translation": "매출 증가는 인프라 비용 증가로 크게 상쇄되었지만 매출은 8% 증가했습니다."
+    },
+    {
+      "id": "en-ko-04",
+      "elapsedMs": 15,
+      "translation": "첫 번째 다운로드 후 모델을 캐시하지만 체크섬이 더 이상 일치하지 않으면 크게 실패합니다."
+    },
+    {
+      "id": "en-ko-05",
+      "elapsedMs": 21,
+      "translation": "업로드 제한: 25MB. 30초 후 시간 초과 요청. https://example.org/docs?v=2를 참조하십시오."
+    },
+    {
+      "id": "en-ko-06",
+      "elapsedMs": 16,
+      "translation": "기회가 되면 또 한 번 더 살펴볼 수 있나요? 서두르지 않습니다."
+    },
+    {
+      "id": "en-ko-07",
+      "elapsedMs": 13,
+      "translation": "Alex는 Jordan에게 그들의 드래프트가 더 많은 작업이 필요하다고 말했습니다."
+    },
+    {
+      "id": "en-ko-08",
+      "elapsedMs": 16,
+      "translation": "그것은 기술적으로 작동하며, 내가 그것에 대해 말할 수 있는 가장 좋은 것입니다."
+    },
+    {
+      "id": "en-ko-09",
+      "elapsedMs": 13,
+      "translation": "사용자는 계정을 만들라는 요청을 받기 전에 번역기를 사용해 볼 수 있어야 합니다."
+    },
+    {
+      "id": "en-ko-10",
+      "elapsedMs": 11,
+      "translation": "문제를 다른 곳으로 옮기기 때문에 빠른 수정을 배제했습니다."
+    },
+    {
+      "id": "en-ko-11",
+      "elapsedMs": 17,
+      "translation": "출시 전: 1. 모델 해시를 확인합니다. 2. 네트워크 연결을 끊습니다. 3. 테스트 문장을 다시 번역합니다."
+    },
+    {
+      "id": "en-ko-12",
+      "elapsedMs": 15,
+      "translation": "세련된 인터페이스는 존재할 이유가 없는 제품을 구출할 수 없습니다."
+    }
+  ]
+}

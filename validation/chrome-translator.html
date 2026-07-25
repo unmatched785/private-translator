@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Chrome on-device Translator validation</title>
+    <style>
+      :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+      body { max-width: 980px; margin: 32px auto; padding: 0 20px 60px; line-height: 1.55; }
+      .capabilities, .controls, article { border: 1px solid #8885; border-radius: 12px; padding: 16px; margin: 16px 0; }
+      button { font: inherit; padding: 10px 16px; margin-right: 8px; cursor: pointer; }
+      button:disabled { cursor: wait; opacity: 0.6; }
+      progress { width: min(420px, 100%); }
+      article p { margin: 8px 0; }
+      .id { font: 13px ui-monospace, monospace; opacity: 0.7; }
+      .translation { font-weight: 650; }
+      .error { color: #d33; white-space: pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <h1>Chrome 온디바이스 번역 검증</h1>
+    <p>문장은 Chrome 내장 언어팩으로 이 기기에서 처리됩니다.</p>
+
+    <section class="capabilities">
+      <h2>환경</h2>
+      <pre id="capabilities">확인 중…</pre>
+    </section>
+
+    <section class="controls">
+      <h2>실행</h2>
+      <button id="run-ko-en" type="button">한국어 → 영어 12문장</button>
+      <button id="run-en-ko" type="button">영어 → 한국어 12문장</button>
+      <p id="status">대기 중</p>
+      <progress id="progress" max="1" value="0"></progress>
+    </section>
+
+    <section>
+      <h2>결과</h2>
+      <div id="results"></div>
+    </section>
+
+    <script type="module" src="./chrome-translator.js"></script>
+  </body>
+</html>

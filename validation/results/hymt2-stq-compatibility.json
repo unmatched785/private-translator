@@ -1,0 +1,34 @@
+{
+  "testedAt": "2026-07-25T10:25:47+09:00",
+  "model": {
+    "repository": "tencent/Hy-MT2-1.8B-1.25Bit-GGUF",
+    "revision": "9df5c824a00a744fb0512a29c640466f4d97dfb0",
+    "file": "Hy-MT2-1.8B-1.25Bit.gguf",
+    "bytes": 461860800,
+    "sha256": "cc497fe8f033b52b3b8b00a7669e9661435432f9d4cd43f7ed24400c01507a93",
+    "license": "Apache-2.0",
+    "integrity": "pass"
+  },
+  "nativeRuntime": {
+    "name": "llama.cpp",
+    "version": "9966 (c749cb041)",
+    "result": "fail",
+    "error": "tensor 'blk.0.attn_k_norm.weight' has offset 203154464, expected 203277344"
+  },
+  "browserRuntime": {
+    "browser": "Chrome 150",
+    "name": "@wllama/wllama",
+    "version": "3.5.1",
+    "crossOriginIsolated": true,
+    "webGpu": true,
+    "downloadAndCacheMs": 4993,
+    "result": "fail",
+    "error": "tensor 'blk.0.attn_k.weight' has invalid ggml type 42. should be in [0, 42)",
+    "terminalError": "RuntimeError: (ABORT)"
+  },
+  "qualityBenchmark": {
+    "result": "not_run",
+    "reason": "The model cannot be loaded by the product's current native or browser runtime."
+  },
+  "verdict": "not_compatible_with_current_runtime"
+}

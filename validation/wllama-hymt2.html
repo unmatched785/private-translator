@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hy-MT2 Chrome 무서버 검증</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Inter, "Pretendard", system-ui, sans-serif;
+        background: #0a0d12;
+        color: #edf2f7;
+      }
+      body { max-width: 860px; margin: 0 auto; padding: 48px 24px; }
+      h1 { margin-bottom: 8px; font-size: clamp(28px, 5vw, 44px); }
+      .lede { color: #a9b4c3; line-height: 1.7; }
+      .card {
+        margin-top: 24px;
+        padding: 24px;
+        border: 1px solid #263143;
+        border-radius: 18px;
+        background: #111722;
+      }
+      dl { display: grid; grid-template-columns: max-content 1fr; gap: 8px 18px; }
+      dt { color: #8391a5; }
+      dd { margin: 0; overflow-wrap: anywhere; }
+      button {
+        padding: 13px 18px;
+        border: 0;
+        border-radius: 12px;
+        background: #7cf0bd;
+        color: #052317;
+        font-weight: 800;
+        cursor: pointer;
+      }
+      button:disabled { cursor: wait; opacity: 0.55; }
+      progress { width: 100%; height: 14px; margin: 16px 0 6px; }
+      textarea, pre {
+        box-sizing: border-box;
+        width: 100%;
+        padding: 14px;
+        border: 1px solid #2a374b;
+        border-radius: 12px;
+        background: #090d14;
+        color: inherit;
+      }
+      textarea { min-height: 90px; resize: vertical; }
+      pre { min-height: 64px; white-space: pre-wrap; }
+      .status { color: #7cf0bd; }
+      .warning { color: #f2c879; }
+      .error { color: #ff8e9e; }
+      small { color: #8391a5; }
+    </style>
+  </head>
+  <body>
+    <h1>Hy-MT2를 Chrome 안에서 직접 실행</h1>
+    <p class="lede">
+      백엔드 없이 이 탭이 로컬 GGUF 모델을 읽고 WebGPU/WASM으로 번역합니다.
+      최초 실행은 정적 호스팅에서 모델을 Chrome 로컬 캐시에 저장하므로 시간이 걸리지만,
+      번역문은 추론 서버로 전송되지 않습니다.
+    </p>
+
+    <section class="card">
+      <h2>환경</h2>
+      <dl id="capabilities"></dl>
+    </section>
+
+    <section class="card">
+      <h2>실행</h2>
+      <label for="source">한국어 원문</label>
+      <textarea id="source">분위기만 싸해졌어.</textarea>
+      <p><button id="run">모델 로드 후 번역</button></p>
+      <div id="status" class="status">대기 중</div>
+      <progress id="progress" max="1" value="0"></progress>
+      <small id="progress-label">아직 모델을 읽지 않았습니다. 최초 1회 이후에는 Chrome 캐시를 사용합니다.</small>
+    </section>
+
+    <section class="card">
+      <h2>결과</h2>
+      <pre id="output">—</pre>
+      <dl id="metrics"></dl>
+    </section>
+
+    <section class="card">
+      <h2>진단 로그</h2>
+      <pre id="log"></pre>
+    </section>
+
+    <script type="module" src="/wllama-hymt2.js"></script>
+  </body>
+</html>
