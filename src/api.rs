@@ -59,6 +59,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/config", get(get_config))
         .route("/api/health", get(get_health))
         .route("/api/translate", post(translate))
+        .route("/api/translate/cancel", post(cancel_translation))
         .route("/api/history", get(list_history))
         .route("/api/history/search", post(search_history))
         .route("/api/history/{id}", get(get_history).delete(delete_history))
@@ -237,6 +238,12 @@ async fn translate(
             ),
             TranslateError::Failed(error) => ApiError::unavailable(error),
         })?;
+    if !state.engines.is_current(&request) {
+        return Err(ApiError::conflict(
+            "request_superseded",
+            "A newer translation request replaced this one.",
+        ));
+    }
 
     let mut history_id = None;
     let mut history_error = None;
@@ -280,23 +287,41 @@ async fn translate(
     }))
 }
 
+async fn cancel_translation(
+    State(state): State<AppState>,
+    Json(request): Json<CancelTranslationRequest>,
+) -> Result<StatusCode, ApiError> {
+    validate_identity(&request.client_id, request.request_seq)?;
+    state
+        .engines
+        .cancel(&request.client_id, request.request_seq);
+    Ok(StatusCode::NO_CONTENT)
+}
+
 fn validate_request_identity(request: &TranslateRequest) -> Result<(), ApiError> {
     match (&request.client_id, request.request_seq) {
         (None, None) => Ok(()),
-        (Some(client_id), Some(sequence))
-            if sequence > 0
-                && (1..=64).contains(&client_id.len())
-                && client_id.bytes().all(|byte| {
-                    byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.')
-                }) =>
-        {
-            Ok(())
-        }
+        (Some(client_id), Some(sequence)) => validate_identity(client_id, sequence),
         _ => Err(ApiError::bad_request(
             "invalid_request_id",
             "The translation request identifier is invalid.",
         )),
     }
+}
+
+fn validate_identity(client_id: &str, sequence: u64) -> Result<(), ApiError> {
+    if sequence > 0
+        && (1..=64).contains(&client_id.len())
+        && client_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+    {
+        return Ok(());
+    }
+    Err(ApiError::bad_request(
+        "invalid_request_id",
+        "The translation request identifier is invalid.",
+    ))
 }
 
 async fn list_history(
@@ -635,6 +660,12 @@ struct TranslateResponse {
     history_id: Option<String>,
     history_error: Option<&'static str>,
     qa_warnings: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CancelTranslationRequest {
+    client_id: String,
+    request_seq: u64,
 }
 
 #[derive(Debug, Deserialize)]

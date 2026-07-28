@@ -312,7 +312,10 @@ function restorePreferences() {
 function bindEvents() {
   refs.uiLocale.addEventListener("change", () => i18n.setLocale(refs.uiLocale.value));
   window.addEventListener("translator:locale-change", refreshLocale);
-  refs.sourceText.addEventListener("input", updateCharacterCount);
+  refs.sourceText.addEventListener("input", () => {
+    invalidateTranslationForContextChange();
+    updateCharacterCount();
+  });
   refs.sourceText.addEventListener("paste", () => {
     window.setTimeout(() => translateCurrent("paste"), 40);
   });
@@ -330,8 +333,10 @@ function bindEvents() {
   refs.deleteMemory.addEventListener("click", deleteActiveMemory);
   refs.deleteActive.addEventListener("click", deleteActiveRecord);
   refs.swapLanguages.addEventListener("click", swapLanguages);
+  refs.sourceLanguage.addEventListener("change", invalidateTranslationForContextChange);
   refs.modelSelect.addEventListener("change", handleModelChange);
   refs.targetLanguage.addEventListener("change", () => {
+    invalidateTranslationForContextChange();
     localStorage.setItem("translator.target", refs.targetLanguage.value);
   });
   refs.saveHistory.addEventListener("change", updateSaveState);
@@ -430,11 +435,8 @@ function renderTranslationMeta() {
 }
 
 async function translateCurrent(trigger) {
-  if (state.translating && trigger === "paste") {
-    state.requestController?.abort();
-  }
-
-  const text = refs.sourceText.value;
+  const requestContext = currentTranslationContext();
+  const text = requestContext.sourceText;
   if (!text.trim()) {
     showToast(t("translate.empty"), true);
     refs.sourceText.focus();
@@ -449,7 +451,7 @@ async function translateCurrent(trigger) {
     return;
   }
 
-  const model = selectedModel();
+  const model = state.config.models.find((candidate) => candidate.id === requestContext.modelId);
   if (!modelIsAvailable(model)) {
     showToast(t("translate.model_unavailable"), true);
     return;
@@ -464,7 +466,7 @@ async function translateCurrent(trigger) {
   state.activeMemoryRevision = null;
   refs.deleteActive.hidden = true;
   updateMemoryControls();
-  state.requestController?.abort();
+  supersedeActiveRequest();
   const controller = new AbortController();
   const requestSequence = ++state.requestSequence;
   state.requestController = controller;
@@ -478,9 +480,9 @@ async function translateCurrent(trigger) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         text,
-        source: refs.sourceLanguage.value,
-        target: refs.targetLanguage.value,
-        model: refs.modelSelect.value,
+        source: requestContext.sourceLanguage,
+        target: requestContext.targetLanguage,
+        model: requestContext.modelId,
         mode: state.config.profile === "quality" ? "quality" : "instant",
         save_history: refs.saveHistory.checked,
         client_id: state.clientId,
@@ -488,8 +490,18 @@ async function translateCurrent(trigger) {
       }),
     });
 
-    if (requestSequence !== state.requestSequence) return;
-    showTranslation(result.translated_text);
+    if (
+      requestSequence !== state.requestSequence ||
+      !translationContextsMatch(currentTranslationContext(), requestContext)
+    ) {
+      return;
+    }
+    if (state.requestController === controller) {
+      state.requestController = null;
+      state.translating = false;
+      setLoadingState(false);
+    }
+    showTranslation(result.translated_text, true, requestContext);
     setTranslationMeta({
       kind: "result",
       modelId: result.model_id,
@@ -505,6 +517,7 @@ async function translateCurrent(trigger) {
     refs.deleteActive.hidden = !result.history_id;
     updateMemoryControls();
     renderQa(result.qa_warnings);
+    state.translationRestoreView = null;
     if (result.history_id) {
       await loadHistory();
     }
@@ -512,7 +525,6 @@ async function translateCurrent(trigger) {
       showToast(t("history.storage_error"), true);
       announceTranslation(t("history.storage_error"));
     }
-    state.translationRestoreView = null;
   } catch (error) {
     if (error.name !== "AbortError" && requestSequence === state.requestSequence) {
       if (state.translationRestoreView) {
@@ -530,6 +542,55 @@ async function translateCurrent(trigger) {
       setLoadingState(false);
     }
   }
+}
+
+function supersedeActiveRequest() {
+  if (!state.requestController && !state.translating) return false;
+  const cancelSequence = ++state.requestSequence;
+  state.requestController?.abort();
+  state.requestController = null;
+  state.translating = false;
+  void api("/api/translate/cancel", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      client_id: state.clientId,
+      request_seq: cancelSequence,
+    }),
+  }).catch(() => {
+    // The local server may already have stopped; client-side invalidation still stands.
+  });
+  return true;
+}
+
+function invalidateTranslationForContextChange() {
+  const superseded = supersedeActiveRequest();
+  if (superseded) {
+    const previous = state.translationRestoreView;
+    state.translationRestoreView = null;
+    if (previous) {
+      restoreTranslationView(previous);
+    } else {
+      setEmptyOutput(t("output.empty_title"), t("output.empty_subtitle"));
+      renderQa([]);
+    }
+    setLoadingState(false);
+  }
+  markDisplayedResultStale();
+}
+
+function markDisplayedResultStale() {
+  if (
+    state.editingMemory ||
+    !refs.translatedText.classList.contains("visible") ||
+    translationContextsMatch(currentTranslationContext(), state.displayedResultContext)
+  ) {
+    return;
+  }
+  const previous = state.translationMeta.kind === "preserved"
+    ? state.translationMeta.previous
+    : state.translationMeta;
+  setTranslationMeta({ kind: "preserved", previous: { ...previous } });
 }
 
 function createClientId() {
@@ -788,6 +849,9 @@ function memoryAsHistoryRecord(memory) {
 async function openHistoryRecord(record) {
   if (!confirmDiscardMemoryEdit()) return;
   if (!confirmDiscardUnpersistedResult()) return;
+  supersedeActiveRequest();
+  state.translationRestoreView = null;
+  setLoadingState(false);
   let openedRecord = record;
   if (record.approved_memory_id && !record.is_memory_asset) {
     try {
@@ -1137,6 +1201,7 @@ function handleModelChange() {
     return;
   }
 
+  if (model.id !== previous) invalidateTranslationForContextChange();
   state.previousModelId = model.id;
   if (state.config) {
     try {
@@ -1152,6 +1217,7 @@ function handleModelChange() {
 function swapLanguages() {
   if (!confirmDiscardMemoryEdit()) return;
   if (!confirmDiscardUnpersistedResult()) return;
+  invalidateTranslationForContextChange();
   const source = refs.sourceLanguage.value;
   const target = refs.targetLanguage.value;
   refs.sourceLanguage.value = source === "auto" ? target : target;
@@ -1168,6 +1234,9 @@ function swapLanguages() {
 function clearWorkspace() {
   if (!confirmDiscardMemoryEdit()) return;
   if (!confirmDiscardUnpersistedResult()) return;
+  supersedeActiveRequest();
+  state.translationRestoreView = null;
+  setLoadingState(false);
   refs.sourceText.value = "";
   state.activeRecordId = null;
   state.activeMemoryId = null;

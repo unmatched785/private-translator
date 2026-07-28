@@ -8,6 +8,8 @@ import path from "node:path";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const records = [];
 const memories = [];
+const latestRequests = new Map();
+const translationDelayMs = Number(process.env.MOCK_TRANSLATION_DELAY_MS ?? 180);
 const supportedLanguages = [
   "ko", "en", "ja", "zh", "zh-Hant", "fr", "de", "es", "pt", "it", "ru", "ar", "tr", "th",
   "vi", "id", "ms", "tl", "hi", "pl", "cs", "nl", "uk", "he", "fa", "bn", "ta", "te", "mr",
@@ -75,10 +77,31 @@ const server = http.createServer(async (request, response) => {
         history_count: records.length,
       });
     }
+    if (request.method === "POST" && url.pathname === "/api/translate/cancel") {
+      const body = await readJson(request);
+      const identity = requestIdentity(body);
+      if (!identity) {
+        return apiError(response, 400, "invalid_request_id", "The translation request identifier is invalid.");
+      }
+      registerLatestRequest(identity);
+      response.writeHead(204);
+      return response.end();
+    }
     if (request.method === "POST" && url.pathname === "/api/translate") {
       const body = await readJson(request);
+      const identity = requestIdentity(body, true);
+      if (identity === false) {
+        return apiError(response, 400, "invalid_request_id", "The translation request identifier is invalid.");
+      }
+      if (identity && !registerLatestRequest(identity)) {
+        return apiError(response, 409, "request_superseded", "A newer translation request replaced this one.");
+      }
       const started = Date.now();
       const translatedText = mockTranslate(body.text, body.target);
+      await new Promise((resolve) => setTimeout(resolve, translationDelayMs));
+      if (identity && !requestIsCurrent(identity)) {
+        return apiError(response, 409, "request_superseded", "A newer translation request replaced this one.");
+      }
       let historyId = null;
       if (body.save_history !== false) {
         historyId = randomUUID();
@@ -100,7 +123,6 @@ const server = http.createServer(async (request, response) => {
           approved_revision: null,
         });
       }
-      await new Promise((resolve) => setTimeout(resolve, 180));
       return json(response, 200, {
         translated_text: translatedText,
         source: body.source,
@@ -108,7 +130,7 @@ const server = http.createServer(async (request, response) => {
         model_id: body.model,
         model_label: config.models.find((model) => model.id === body.model)?.label || "Local demo",
         privacy: "device",
-        latency_ms: 180,
+        latency_ms: translationDelayMs,
         chunk_count: 1,
         history_id: historyId,
         history_error: null,
@@ -278,6 +300,30 @@ function mockTranslate(text, target) {
     ["ja", "日本語"],
   ]).get(target) || target;
   return `[Local demo · ${label}] ${String(text).trim()}`;
+}
+
+function requestIdentity(body, allowLegacy = false) {
+  if (body.client_id == null && body.request_seq == null) return allowLegacy ? null : false;
+  if (
+    typeof body.client_id !== "string" ||
+    !/^[a-z0-9._-]{1,64}$/i.test(body.client_id) ||
+    !Number.isSafeInteger(body.request_seq) ||
+    body.request_seq <= 0
+  ) {
+    return false;
+  }
+  return { clientId: body.client_id, sequence: body.request_seq };
+}
+
+function registerLatestRequest(identity) {
+  const current = latestRequests.get(identity.clientId);
+  if (current != null && identity.sequence <= current) return false;
+  latestRequests.set(identity.clientId, identity.sequence);
+  return true;
+}
+
+function requestIsCurrent(identity) {
+  return latestRequests.get(identity.clientId) === identity.sequence;
 }
 
 function publicMemory(memory) {
